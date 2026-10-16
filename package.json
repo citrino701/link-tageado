@@ -9,7 +9,8 @@
     "build": "vite build",
     "preview": "vite preview",
     "clean": "rm -rf dist",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "build:gas-ui": "vite build --config vite.gas.config.ts"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",
