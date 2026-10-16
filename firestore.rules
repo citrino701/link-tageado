@@ -1,0 +1,29 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    // Links collection
+    match /links/{linkId} {
+      allow read, write: if isValidId(linkId);
+    }
+
+    // Clicks collection: durable click persistence before 302
+    match /clicks/{clickId} {
+      allow read, write: if isValidId(clickId);
+    }
+
+    // Sync queue collection: persistent failed or pending sync events
+    match /sync_queue/{queueId} {
+      allow read, write: if isValidId(queueId);
+    }
+
+    // System settings collection
+    match /system_settings/{settingId} {
+      allow read, write: if isValidId(settingId);
+    }
+  }
+}
+

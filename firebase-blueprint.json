@@ -1,0 +1,106 @@
+{
+  "entities": {
+    "Link": {
+      "title": "Link",
+      "description": "Traceable link configuration record",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 64, "pattern": "^[a-zA-Z0-9_-]+$" },
+        "name": { "type": "string", "maxLength": 200 },
+        "spreadsheetId": { "type": "string", "maxLength": 100 },
+        "spreadsheetUrl": { "type": "string", "maxLength": 500 },
+        "spreadsheetTitle": { "type": "string", "maxLength": 200 },
+        "destinationType": { "type": "string", "enum": ["whatsapp", "url"] },
+        "destinationUrl": { "type": "string", "maxLength": 1000 },
+        "whatsappNumber": { "type": "string", "maxLength": 30 },
+        "whatsappMessage": { "type": "string", "maxLength": 1000 },
+        "campaign": { "type": "string", "maxLength": 100 },
+        "source": { "type": "string", "maxLength": 100 },
+        "medium": { "type": "string", "maxLength": 100 },
+        "content": { "type": "string", "maxLength": 200 },
+        "shortPath": { "type": "string", "maxLength": 100 },
+        "status": { "type": "string", "enum": ["active", "inactive"] },
+        "realClicksCount": { "type": "number" },
+        "totalClicksCount": { "type": "number" },
+        "uniqueVisitorsCount": { "type": "number" },
+        "suspectBotsCount": { "type": "number" },
+        "createdByEmail": { "type": "string", "maxLength": 100 },
+        "createdAt": { "type": "string", "maxLength": 100 },
+        "updatedAt": { "type": "string", "maxLength": 100 }
+      },
+      "required": ["id", "name", "spreadsheetId", "destinationType", "campaign", "source", "status"]
+    },
+    "Click": {
+      "title": "Click",
+      "description": "Click event recorded by backend and sheets",
+      "type": "object",
+      "properties": {
+        "clickId": { "type": "string", "maxLength": 100 },
+        "linkId": { "type": "string", "maxLength": 64 },
+        "linkName": { "type": "string", "maxLength": 200 },
+        "campaign": { "type": "string", "maxLength": 100 },
+        "source": { "type": "string", "maxLength": 100 },
+        "medium": { "type": "string", "maxLength": 100 },
+        "content": { "type": "string", "maxLength": 200 },
+        "timestamp": { "type": "string", "maxLength": 100 },
+        "referer": { "type": "string", "maxLength": 500 },
+        "browser": { "type": "string", "maxLength": 100 },
+        "os": { "type": "string", "maxLength": 100 },
+        "deviceType": { "type": "string", "maxLength": 50 },
+        "userAgent": { "type": "string", "maxLength": 500 },
+        "visitorId": { "type": "string", "maxLength": 100 },
+        "isSuspectBot": { "type": "boolean" },
+        "isDuplicate": { "type": "boolean" },
+        "syncedToSheets": { "type": "boolean" },
+        "syncError": { "type": "string", "maxLength": 500 }
+      },
+      "required": ["clickId", "linkId", "timestamp"]
+    },
+    "SyncQueueItem": {
+      "title": "SyncQueueItem",
+      "description": "Failed click write queued for retry",
+      "type": "object",
+      "properties": {
+        "queueId": { "type": "string", "maxLength": 100 },
+        "clickId": { "type": "string", "maxLength": 100 },
+        "linkId": { "type": "string", "maxLength": 64 },
+        "spreadsheetId": { "type": "string", "maxLength": 100 },
+        "error": { "type": "string", "maxLength": 500 },
+        "attempts": { "type": "number" },
+        "status": { "type": "string", "enum": ["pending", "resolved", "failed"] },
+        "createdAt": { "type": "string", "maxLength": 100 }
+      },
+      "required": ["queueId", "clickId", "linkId", "spreadsheetId", "status"]
+    },
+    "SystemSetting": {
+      "title": "SystemSetting",
+      "description": "System configuration such as Google Auth connection state",
+      "type": "object",
+      "properties": {
+        "connectedEmail": { "type": "string", "maxLength": 100 },
+        "connectedAt": { "type": "string", "maxLength": 100 },
+        "hasRefreshToken": { "type": "boolean" },
+        "updatedAt": { "type": "string", "maxLength": 100 }
+      },
+      "required": ["connectedEmail"]
+    }
+  },
+  "firestore": {
+    "/links/{linkId}": {
+      "schema": "Link",
+      "description": "Configured tracking links"
+    },
+    "/clicks/{clickId}": {
+      "schema": "Click",
+      "description": "Recorded click events"
+    },
+    "/sync_queue/{queueId}": {
+      "schema": "SyncQueueItem",
+      "description": "Failed sheet synchronizations queued for retry"
+    },
+    "/system_settings/{settingId}": {
+      "schema": "SystemSetting",
+      "description": "Admin system settings"
+    }
+  }
+}
