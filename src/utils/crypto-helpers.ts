@@ -4,7 +4,10 @@ import crypto from 'node:crypto';
  * Derives a 32-byte key from any arbitrary secret string using SHA-256.
  */
 function deriveKey(secretKey: string): Buffer {
-  return crypto.createHash('sha256').update(secretKey || 'default-fallback-key-32-chars-long').digest();
+  if (!secretKey) {
+    throw new Error('TOKEN_ENCRYPTION_KEY não configurada.');
+  }
+  return crypto.createHash('sha256').update(secretKey).digest();
 }
 
 /**

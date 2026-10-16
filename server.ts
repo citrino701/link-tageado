@@ -31,7 +31,9 @@ const PORT = process.env.PORT || 3000;
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'hugoviajante@gmail.com';
 
 app.use(express.json());
-app.use(cookieParser());
+const SESSION_SECRET = process.env.SESSION_SECRET || '';
+const hasSecureSessionSecret = SESSION_SECRET.length >= 32;
+app.use(cookieParser(hasSecureSessionSecret ? SESSION_SECRET : undefined));
 
 // Trust proxy for secure cookies and protocol headers behind Google Cloud Run
 app.set('trust proxy', 1);
@@ -250,8 +252,7 @@ function triggerSyncQueueItem(queueId: string, spreadsheetId: string, clickRecor
 // -----------------------------------------------------------------------------
 // OAUTH 2.0 BACKEND AUTHENTICATION (Google Sheets & Admin Login)
 // -----------------------------------------------------------------------------
-const TOKEN_ENCRYPTION_KEY =
-  process.env.TOKEN_ENCRYPTION_KEY || '1e93effa9667afbbd795ea9c038f41500e30eb1f99358bde48f51d5878fa8ab3';
+const TOKEN_ENCRYPTION_KEY = process.env.TOKEN_ENCRYPTION_KEY || '';
 
 function getRedirectUri(req: Request): string {
   if (process.env.APP_URL && !process.env.APP_URL.includes('MY_APP_URL')) {
@@ -264,6 +265,13 @@ function getRedirectUri(req: Request): string {
 
 // Generate OAuth 2.0 authorization URL
 app.get('/api/auth/google/url', (req: Request, res: Response) => {
+  if (!hasSecureSessionSecret) {
+    return res.status(503).json({
+      isConfigured: false,
+      error: 'Configure SESSION_SECRET com pelo menos 32 caracteres nas variáveis secretas do servidor.',
+    });
+  }
+
   const credentials = googleSheetsService.getOAuthCredentials();
   if (!credentials.isConfigured) {
     return res.status(400).json({
@@ -310,6 +318,9 @@ app.get('/api/auth/google/callback', async (req: Request, res: Response) => {
     const previousAuth = await store.getAuthSetting();
     let encryptedRefreshToken = previousAuth?.encryptedRefreshToken;
     if (tokens.refresh_token) {
+      if (!TOKEN_ENCRYPTION_KEY) {
+        throw new Error('Configure TOKEN_ENCRYPTION_KEY nas variáveis secretas do servidor antes de conectar a conta Google.');
+      }
       encryptedRefreshToken = encryptToken(tokens.refresh_token, TOKEN_ENCRYPTION_KEY);
     }
 
@@ -329,6 +340,7 @@ app.get('/api/auth/google/callback', async (req: Request, res: Response) => {
 
     // Set secure administrative session cookie
     res.cookie('hlr_admin_session', email, {
+      signed: true,
       httpOnly: true,
       secure: req.secure || req.headers['x-forwarded-proto'] === 'https',
       sameSite: 'lax',
@@ -355,16 +367,18 @@ app.post('/api/auth/logout', (req: Request, res: Response) => {
 
 // Admin authorization check helper
 function verifyAdmin(req: Request, res: Response, next: NextFunction) {
-  const sessionEmail = req.cookies['hlr_admin_session'];
-  const headerEmail = (req.headers['x-admin-email'] as string) || req.body?.adminEmail || '';
-  const clientEmail = sessionEmail || headerEmail;
+  const sessionEmail = req.signedCookies?.['hlr_admin_session'];
 
-  // If email is provided, it must match ADMIN_EMAIL
-  if (clientEmail && clientEmail.toLowerCase() !== ADMIN_EMAIL.toLowerCase()) {
+  if (!sessionEmail || typeof sessionEmail !== 'string') {
+    return res.status(401).json({ error: 'Sessão administrativa ausente ou inválida.' });
+  }
+
+  if (sessionEmail.toLowerCase() !== ADMIN_EMAIL.toLowerCase()) {
     return res.status(403).json({
       error: `Acesso negado: apenas o e-mail administrador configurado (${ADMIN_EMAIL}) pode gerenciar este aplicativo.`,
     });
   }
+
   next();
 }
 

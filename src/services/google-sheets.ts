@@ -8,8 +8,7 @@ import {
 import { decryptToken } from '../utils/crypto-helpers.ts';
 import { store, LinkRecord, ClickRecord, SyncQueueItem } from './store.ts';
 
-const TOKEN_ENCRYPTION_KEY =
-  process.env.TOKEN_ENCRYPTION_KEY || '1e93effa9667afbbd795ea9c038f41500e30eb1f99358bde48f51d5878fa8ab3';
+
 
 export class GoogleSheetsService {
   private oauth2Client: any = null;
@@ -95,7 +94,8 @@ export class GoogleSheetsService {
     // 1. If we have an encrypted refresh token in store, decrypt and use it
     if (authSetting?.encryptedRefreshToken) {
       try {
-        const refreshToken = decryptToken(authSetting.encryptedRefreshToken, TOKEN_ENCRYPTION_KEY);
+        const encryptionKey = process.env.TOKEN_ENCRYPTION_KEY || '';
+        const refreshToken = decryptToken(authSetting.encryptedRefreshToken, encryptionKey);
         if (refreshToken) {
           this.oauth2Client.setCredentials({
             refresh_token: refreshToken,

@@ -1,20 +1,181 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { initializeApp, getApps, getApp } from 'firebase/app';
-import {
-  getFirestore,
-  doc,
-  getDoc,
-  setDoc,
-  updateDoc,
-  deleteDoc,
-  collection,
-  getDocs,
-  query,
-  where,
-  orderBy,
-  limit,
-} from 'firebase/firestore';
+import { google } from 'googleapis';
+
+type FirestoreDocReference = {
+  db: FirestoreRestClient;
+  collectionName: string;
+  id: string;
+};
+
+type FirestoreCollectionReference = {
+  db: FirestoreRestClient;
+  collectionName: string;
+};
+
+function encodeFirestoreValue(value: any): any {
+  if (value === null) return { nullValue: null };
+  if (typeof value === 'string') return { stringValue: value };
+  if (typeof value === 'boolean') return { booleanValue: value };
+  if (typeof value === 'number') {
+    return Number.isSafeInteger(value)
+      ? { integerValue: String(value) }
+      : { doubleValue: value };
+  }
+  if (Array.isArray(value)) {
+    return { arrayValue: { values: value.map(encodeFirestoreValue) } };
+  }
+  if (typeof value === 'object' && value) {
+    return { mapValue: { fields: encodeFirestoreFields(value) } };
+  }
+  return { nullValue: null };
+}
+
+function encodeFirestoreFields(value: Record<string, any>): Record<string, any> {
+  return Object.fromEntries(
+    Object.entries(value)
+      .filter(([, fieldValue]) => fieldValue !== undefined)
+      .map(([key, fieldValue]) => [key, encodeFirestoreValue(fieldValue)])
+  );
+}
+
+function decodeFirestoreValue(value: any): any {
+  if ('nullValue' in value) return null;
+  if ('stringValue' in value) return value.stringValue;
+  if ('booleanValue' in value) return value.booleanValue;
+  if ('integerValue' in value) return Number(value.integerValue);
+  if ('doubleValue' in value) return value.doubleValue;
+  if ('timestampValue' in value) return value.timestampValue;
+  if ('arrayValue' in value) return (value.arrayValue.values || []).map(decodeFirestoreValue);
+  if ('mapValue' in value) return decodeFirestoreFields(value.mapValue.fields || {});
+  if ('bytesValue' in value) return value.bytesValue;
+  if ('referenceValue' in value) return value.referenceValue;
+  if ('geoPointValue' in value) return value.geoPointValue;
+  return null;
+}
+
+function decodeFirestoreFields(fields: Record<string, any>): Record<string, any> {
+  return Object.fromEntries(
+    Object.entries(fields).map(([key, value]) => [key, decodeFirestoreValue(value)])
+  );
+}
+
+class FirestoreRestClient {
+  private readonly basePath: string;
+  private readonly authClient: Promise<any>;
+
+  constructor(projectId: string, databaseId: string) {
+    this.basePath =
+      `projects/${encodeURIComponent(projectId)}/databases/${encodeURIComponent(databaseId)}/documents`;
+    this.authClient = google.auth.getClient({
+      scopes: ['https://www.googleapis.com/auth/datastore'],
+    });
+  }
+
+  private async request(method: string, path: string, data?: any, params?: Record<string, any>) {
+    const auth = await this.authClient;
+    return auth.request({
+      url: `https://firestore.googleapis.com/v1/${path}`,
+      method,
+      data,
+      params,
+    });
+  }
+
+  async get(collectionName: string, id: string) {
+    const path = `${this.basePath}/${encodeURIComponent(collectionName)}/${encodeURIComponent(id)}`;
+    const response = await this.request('GET', path);
+    return response.data;
+  }
+
+  async list(collectionName: string) {
+    const documents: any[] = [];
+    let pageToken: string | undefined;
+    do {
+      const response = await this.request(
+        'GET',
+        `${this.basePath}/${encodeURIComponent(collectionName)}`,
+        undefined,
+        {
+        pageSize: 1000,
+        ...(pageToken ? { pageToken } : {}),
+        }
+      );
+      documents.push(...(response.data.documents || []));
+      pageToken = response.data.nextPageToken;
+    } while (pageToken);
+    return documents;
+  }
+
+  async set(collectionName: string, id: string, value: Record<string, any>) {
+    const path = `${this.basePath}/${encodeURIComponent(collectionName)}/${encodeURIComponent(id)}`;
+    const response = await this.request('PATCH', path, { fields: encodeFirestoreFields(value) });
+    return response.data;
+  }
+
+  async update(collectionName: string, id: string, value: Record<string, any>) {
+    const path = `${this.basePath}/${encodeURIComponent(collectionName)}/${encodeURIComponent(id)}`;
+    const params = new URLSearchParams();
+    Object.keys(value).forEach((fieldPath) => params.append('updateMask.fieldPaths', fieldPath));
+    const response = await this.request(
+      'PATCH',
+      `${path}?${params.toString()}`,
+      { fields: encodeFirestoreFields(value) }
+    );
+    return response.data;
+  }
+
+  async delete(collectionName: string, id: string) {
+    const path = `${this.basePath}/${encodeURIComponent(collectionName)}/${encodeURIComponent(id)}`;
+    return this.request('DELETE', path);
+  }
+}
+
+function doc(db: FirestoreRestClient, collectionName: string, id: string): FirestoreDocReference {
+  return { db, collectionName, id };
+}
+
+function collection(db: FirestoreRestClient, collectionName: string): FirestoreCollectionReference {
+  return { db, collectionName };
+}
+
+async function getDoc(reference: FirestoreDocReference) {
+  try {
+    const data = await reference.db.get(reference.collectionName, reference.id);
+    return {
+      exists: () => Boolean(data?.name),
+      data: () => decodeFirestoreFields(data?.fields || {}),
+    };
+  } catch (error: any) {
+    if (error?.response?.status === 404 || error?.code === 404) {
+      return { exists: () => false, data: () => undefined };
+    }
+    throw error;
+  }
+}
+
+async function setDoc(reference: FirestoreDocReference, value: Record<string, any>) {
+  return reference.db.set(reference.collectionName, reference.id, value);
+}
+
+async function updateDoc(reference: FirestoreDocReference, value: Record<string, any>) {
+  return reference.db.update(reference.collectionName, reference.id, value);
+}
+
+async function deleteDoc(reference: FirestoreDocReference) {
+  return reference.db.delete(reference.collectionName, reference.id);
+}
+
+async function getDocs(reference: FirestoreCollectionReference) {
+  const documents = await reference.db.list(reference.collectionName);
+  return {
+    forEach(callback: (document: { data: () => Record<string, any> }) => void) {
+      documents.forEach((document) => {
+        callback({ data: () => decodeFirestoreFields(document.fields || {}) });
+      });
+    },
+  };
+}
 
 export interface LinkRecord {
   id: string;
@@ -160,8 +321,10 @@ class AppStore {
       const configPath = path.resolve(process.cwd(), 'firebase-applet-config.json');
       if (fs.existsSync(configPath)) {
         const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-        const app = getApps().length === 0 ? initializeApp(config) : getApp();
-        this.db = getFirestore(app, config.firestoreDatabaseId);
+        if (!config.projectId || !config.firestoreDatabaseId) {
+          throw new Error('Project ID ou database ID do Firestore ausente na configuração.');
+        }
+        this.db = new FirestoreRestClient(config.projectId, config.firestoreDatabaseId);
         this.isFirestoreReady = true;
         // Asynchronously load links, queue, and auth from Firestore
         this.syncFromFirestore().catch((err) => {
@@ -344,46 +507,50 @@ class AppStore {
     const link = await this.getLink(id);
     if (!link) return;
 
-    link.totalClicksCount = (link.totalClicksCount || 0) + 1;
+    const updatedLink = { ...link };
+    updatedLink.totalClicksCount = (updatedLink.totalClicksCount || 0) + 1;
     if (stats.isSuspectBot) {
-      link.suspectBotsCount = (link.suspectBotsCount || 0) + 1;
+      updatedLink.suspectBotsCount = (updatedLink.suspectBotsCount || 0) + 1;
     } else {
-      link.realClicksCount = (link.realClicksCount || 0) + 1;
+      updatedLink.realClicksCount = (updatedLink.realClicksCount || 0) + 1;
       if (stats.isNewVisitor) {
-        link.uniqueVisitorsCount = (link.uniqueVisitorsCount || 0) + 1;
+        updatedLink.uniqueVisitorsCount = (updatedLink.uniqueVisitorsCount || 0) + 1;
       }
     }
-    link.updatedAt = new Date().toISOString();
-    this.links.set(id, link);
-    this.saveToDisk();
+    updatedLink.updatedAt = new Date().toISOString();
 
     if (this.db) {
       try {
         await updateDoc(doc(this.db, 'links', id), {
-          totalClicksCount: link.totalClicksCount,
-          suspectBotsCount: link.suspectBotsCount,
-          realClicksCount: link.realClicksCount,
-          uniqueVisitorsCount: link.uniqueVisitorsCount,
-          updatedAt: link.updatedAt,
+          totalClicksCount: updatedLink.totalClicksCount,
+          suspectBotsCount: updatedLink.suspectBotsCount,
+          realClicksCount: updatedLink.realClicksCount,
+          uniqueVisitorsCount: updatedLink.uniqueVisitorsCount,
+          updatedAt: updatedLink.updatedAt,
         });
       } catch (err) {
-        // silent
+        console.error('[Store] Error updating link click counters in Firestore:', (err as any).message);
+        throw err;
       }
     }
+
+    this.links.set(id, updatedLink);
+    this.saveToDisk();
   }
 
   // Clicks operations: DURABLE PERSISTENCE
   public async recordClick(click: ClickRecord): Promise<void> {
-    this.clicks.push(click);
-    this.saveToDisk(); // Synchronously persist to disk snapshot
-
     if (this.db) {
       try {
         await setDoc(doc(this.db, 'clicks', click.clickId), click);
       } catch (err: any) {
-        console.warn('[Store] Error saving click to Firestore:', err.message);
+        console.error('[Store] Error saving click to Firestore:', err.message);
+        throw err;
       }
     }
+
+    this.clicks.push(click);
+    this.saveToDisk(); // Synchronously persist to local snapshot after remote persistence
   }
 
   public getRecentClicksForLink(linkId: string, limitCount = 50): ClickRecord[] {
@@ -402,16 +569,17 @@ class AppStore {
 
   // Sync Queue operations: DURABLE PERSISTENCE
   public async addToSyncQueue(item: SyncQueueItem): Promise<void> {
-    this.syncQueue.set(item.queueId, item);
-    this.saveToDisk(); // Persist to disk snapshot
-
     if (this.db) {
       try {
         await setDoc(doc(this.db, 'sync_queue', item.queueId), item);
       } catch (err: any) {
-        console.warn('[Store] Error saving sync queue to Firestore:', err.message);
+        console.error('[Store] Error saving sync queue to Firestore:', err.message);
+        throw err;
       }
     }
+
+    this.syncQueue.set(item.queueId, item);
+    this.saveToDisk(); // Persist to local snapshot after remote persistence
   }
 
   public async getSyncQueue(filter: 'all' | 'pending' | 'failed' | 'unresolved' = 'unresolved'): Promise<SyncQueueItem[]> {
