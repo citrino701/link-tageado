@@ -15,68 +15,7 @@ export const DiagnosticTestsModal: React.FC<DiagnosticTestsModalProps> = ({
   const [isRunning, setIsRunning] = useState(false);
   const [testResults, setTestResults] = useState<
     Array<{ id: number; title: string; passed: boolean; details: string }>
-  >([
-    {
-      id: 1,
-      title: 'Criar dois links para a mesma planilha',
-      passed: true,
-      details: 'Valida coexistência de múltiplos links na aba "Links" da mesma planilha',
-    },
-    {
-      id: 2,
-      title: 'Criar links para duas planilhas diferentes',
-      passed: true,
-      details: 'Valida independência de planilhas e extração individual de spreadsheetId',
-    },
-    {
-      id: 3,
-      title: 'Registrar clique sem o administrador com app aberto',
-      passed: true,
-      details: 'A rota /r/:linkId grava autonomamente no Sheets via autorização persistente',
-    },
-    {
-      id: 4,
-      title: 'Registrar clique em janela anônima',
-      passed: true,
-      details: 'Gera cookie _hlr_vid anônimo sem solicitar conta Google ao visitante',
-    },
-    {
-      id: 5,
-      title: 'Confirmar que o visitante não precisa de login',
-      passed: true,
-      details: 'Nenhum login do Google é exigido ao visitante que acessa o link público',
-    },
-    {
-      id: 6,
-      title: 'Confirmar criação automática das abas (Links, Cliques, Resumo)',
-      passed: true,
-      details: 'Verifica existência e cabeçalhos oficiais das três abas via API Sheets',
-    },
-    {
-      id: 7,
-      title: 'Confirmar redirecionamento ao WhatsApp',
-      passed: true,
-      details: 'Valida wa.me/NUMERO com encodeURIComponent na mensagem pré-configurada',
-    },
-    {
-      id: 8,
-      title: 'Confirmar redirecionamento para uma URL comum',
-      passed: true,
-      details: 'Valida redirecionamento HTTP 302 direto para websites externos cadastrados',
-    },
-    {
-      id: 9,
-      title: 'Confirmar que um link desativado não redireciona',
-      passed: true,
-      details: 'Retorna página informativa 410 sem efetuar redirecionamento de links inativos',
-    },
-    {
-      id: 10,
-      title: 'Confirmar que erros do Sheets ficam na fila para nova tentativa',
-      passed: true,
-      details: 'Qualquer erro na API Sheets enfileira o evento em sync_queue no Firestore',
-    },
-  ]);
+  >([]);
   const [lastRunTime, setLastRunTime] = useState<string | null>(null);
 
   if (!isOpen) return null;
@@ -103,7 +42,7 @@ export const DiagnosticTestsModal: React.FC<DiagnosticTestsModalProps> = ({
     }
   };
 
-  const allPassed = testResults.every((t) => t.passed);
+  const allPassed = testResults.length > 0 && testResults.every((t) => t.passed);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
@@ -115,9 +54,9 @@ export const DiagnosticTestsModal: React.FC<DiagnosticTestsModalProps> = ({
               <ShieldCheck className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="text-base font-bold text-slate-100">Testes Obrigatórios de Conformidade</h3>
+              <h3 className="text-base font-bold text-slate-100">Validação da implantação</h3>
               <p className="text-xs text-slate-400">
-                Validação automática dos 10 requisitos técnicos exigidos na especificação
+                Confere acesso ao Apps Script, planilha central e cadastro de links
               </p>
             </div>
           </div>
@@ -136,13 +75,19 @@ export const DiagnosticTestsModal: React.FC<DiagnosticTestsModalProps> = ({
             className={`p-3.5 rounded-xl border text-xs flex items-center justify-between ${
               allPassed
                 ? 'bg-emerald-950/30 border-emerald-500/30 text-emerald-300'
-                : 'bg-rose-950/30 border-rose-500/30 text-rose-300'
+                : testResults.length === 0
+                  ? 'bg-slate-950/50 border-slate-700 text-slate-300'
+                  : 'bg-rose-950/30 border-rose-500/30 text-rose-300'
             }`}
           >
             <div className="flex items-center gap-2">
-              <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+              {allPassed ? <CheckCircle2 className="w-4 h-4 text-emerald-400" /> : <AlertCircle className="w-4 h-4 text-amber-400" />}
               <span>
-                <strong>10 de 10 testes validados com sucesso.</strong> Todos os requisitos foram cumpridos.
+                {testResults.length === 0
+                  ? <strong>Execute a validação para conferir a implantação.</strong>
+                  : allPassed
+                    ? <strong>Validação concluída sem erros.</strong>
+                    : <strong>Há verificações que precisam de atenção.</strong>}
               </span>
             </div>
             {lastRunTime && (
