@@ -49,6 +49,10 @@ function doGet() {
     template.assetBaseUrl = PUBLIC_ASSET_BASE;
     template.publicLinkBaseUrl = props.getProperty(PUBLIC_LINK_BASE_PROPERTY) ||
       "https://citrino701.github.io/link-tageado/";
+    template.clientConfigJson = JSON.stringify({
+      publicLinkBaseUrl: template.publicLinkBaseUrl,
+      assetBaseUrl: PUBLIC_ASSET_BASE
+    });
     return template.evaluate()
       .setTitle("Hub de Links Rastreáveis")
       .addMetaTag("viewport", "width=device-width, initial-scale=1");
@@ -88,6 +92,9 @@ function apiRequest(method, requestPath, rawBody) {
     }
     if (verb === "POST" && path === "/api/admin/queue/retry") {
       return response_(200, retryFailures_());
+    }
+    if (verb === "POST" && path === "/api/admin/run-diagnostic-tests") {
+      return response_(200, runDiagnostics_());
     }
 
     const statusMatch = path.match(/^\/api\/admin\/links\/([^/]+)\/status$/);
@@ -138,6 +145,65 @@ function assertAdmin_() {
     throw error;
   }
   return activeEmail;
+}
+
+function runDiagnostics_() {
+  const email = assertAdmin_();
+  const results = [];
+  results.push({
+    id: 1,
+    title: "Acesso administrativo restrito",
+    passed: !!email,
+    details: "A sessão autenticada corresponde à conta administradora " + email + "."
+  });
+
+  try {
+    const registry = getRegistry_();
+    const linksSheet = registry.getSheetByName("Links");
+    if (!linksSheet) throw new Error('A aba "Links" não existe.');
+    ensureRegistrySchema_(linksSheet);
+    results.push({
+      id: 2,
+      title: "Planilha central acessível",
+      passed: true,
+      details: "A aba Links e o esquema de cadastro estão disponíveis."
+    });
+  } catch (error) {
+    results.push({
+      id: 2,
+      title: "Planilha central acessível",
+      passed: false,
+      details: error.message || String(error)
+    });
+  }
+
+  const publicBase = PropertiesService.getScriptProperties().getProperty(PUBLIC_LINK_BASE_PROPERTY) ||
+    "https://citrino701.github.io/link-tageado/";
+  results.push({
+    id: 3,
+    title: "URL pública de rastreamento configurada",
+    passed: /^https:\/\//i.test(publicBase),
+    details: publicBase
+  });
+
+  try {
+    const links = getAllLinks_();
+    results.push({
+      id: 4,
+      title: "Cadastro de links carregado",
+      passed: true,
+      details: links.length + " link(s) encontrados na planilha central."
+    });
+  } catch (error) {
+    results.push({
+      id: 4,
+      title: "Cadastro de links carregado",
+      passed: false,
+      details: error.message || String(error)
+    });
+  }
+
+  return { success: true, allPassed: results.every(function (item) { return item.passed; }), results: results };
 }
 
 function getAdminStatus_() {
@@ -680,7 +746,7 @@ function normalizeSpreadsheetId_(value) {
 
 function isActive_(value) {
   const text = String(value).trim().toLowerCase();
-  return value === true || ["true", "1", "sim", "yes", "ativo", "pending", "failed"].indexOf(text) >= 0;
+  return value === true || ["true", "1", "sim", "yes", "ativo"].indexOf(text) >= 0;
 }
 
 function validateDestination_(value) {
