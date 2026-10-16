@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { extractSpreadsheetId, buildWhatsAppUrl, validateDestinationUrl } from '../utils/sheets-helpers.ts';
 import { LinkRecord } from '../services/store.ts';
+import { buildPublicLink } from '../utils/public-link.ts';
 
 interface CreateLinkModalProps {
   isOpen: boolean;
@@ -187,8 +188,8 @@ export const CreateLinkModal: React.FC<CreateLinkModalProps> = ({
     }
   };
 
-  const handleCopy = (path: string) => {
-    const fullUrl = `${window.location.origin}${path}`;
+  const handleCopy = (link: LinkRecord) => {
+    const fullUrl = buildPublicLink(link);
     navigator.clipboard.writeText(fullUrl);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
@@ -264,7 +265,7 @@ export const CreateLinkModal: React.FC<CreateLinkModalProps> = ({
                   {window.location.origin}{createdLink.shortPath}
                 </span>
                 <button
-                  onClick={() => handleCopy(createdLink.shortPath)}
+                  onClick={() => handleCopy(createdLink)}
                   className="flex items-center gap-1 px-3 py-1.5 rounded-md bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-medium transition shrink-0"
                 >
                   <Copy className="w-3.5 h-3.5" />
