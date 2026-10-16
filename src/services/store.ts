@@ -530,7 +530,8 @@ class AppStore {
           updatedAt: link.updatedAt,
         });
       } catch (err) {
-        // silent
+        console.error('[Store] Error updating link click counters in Firestore:', (err as any).message);
+        throw err;
       }
     }
   }
@@ -544,7 +545,8 @@ class AppStore {
       try {
         await setDoc(doc(this.db, 'clicks', click.clickId), click);
       } catch (err: any) {
-        console.warn('[Store] Error saving click to Firestore:', err.message);
+        console.error('[Store] Error saving click to Firestore:', err.message);
+        throw err;
       }
     }
   }
@@ -572,7 +574,8 @@ class AppStore {
       try {
         await setDoc(doc(this.db, 'sync_queue', item.queueId), item);
       } catch (err: any) {
-        console.warn('[Store] Error saving sync queue to Firestore:', err.message);
+        console.error('[Store] Error saving sync queue to Firestore:', err.message);
+        throw err;
       }
     }
   }
