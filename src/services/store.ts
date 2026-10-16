@@ -507,40 +507,39 @@ class AppStore {
     const link = await this.getLink(id);
     if (!link) return;
 
-    link.totalClicksCount = (link.totalClicksCount || 0) + 1;
+    const updatedLink = { ...link };
+    updatedLink.totalClicksCount = (updatedLink.totalClicksCount || 0) + 1;
     if (stats.isSuspectBot) {
-      link.suspectBotsCount = (link.suspectBotsCount || 0) + 1;
+      updatedLink.suspectBotsCount = (updatedLink.suspectBotsCount || 0) + 1;
     } else {
-      link.realClicksCount = (link.realClicksCount || 0) + 1;
+      updatedLink.realClicksCount = (updatedLink.realClicksCount || 0) + 1;
       if (stats.isNewVisitor) {
-        link.uniqueVisitorsCount = (link.uniqueVisitorsCount || 0) + 1;
+        updatedLink.uniqueVisitorsCount = (updatedLink.uniqueVisitorsCount || 0) + 1;
       }
     }
-    link.updatedAt = new Date().toISOString();
-    this.links.set(id, link);
-    this.saveToDisk();
+    updatedLink.updatedAt = new Date().toISOString();
 
     if (this.db) {
       try {
         await updateDoc(doc(this.db, 'links', id), {
-          totalClicksCount: link.totalClicksCount,
-          suspectBotsCount: link.suspectBotsCount,
-          realClicksCount: link.realClicksCount,
-          uniqueVisitorsCount: link.uniqueVisitorsCount,
-          updatedAt: link.updatedAt,
+          totalClicksCount: updatedLink.totalClicksCount,
+          suspectBotsCount: updatedLink.suspectBotsCount,
+          realClicksCount: updatedLink.realClicksCount,
+          uniqueVisitorsCount: updatedLink.uniqueVisitorsCount,
+          updatedAt: updatedLink.updatedAt,
         });
       } catch (err) {
         console.error('[Store] Error updating link click counters in Firestore:', (err as any).message);
         throw err;
       }
     }
+
+    this.links.set(id, updatedLink);
+    this.saveToDisk();
   }
 
   // Clicks operations: DURABLE PERSISTENCE
   public async recordClick(click: ClickRecord): Promise<void> {
-    this.clicks.push(click);
-    this.saveToDisk(); // Synchronously persist to disk snapshot
-
     if (this.db) {
       try {
         await setDoc(doc(this.db, 'clicks', click.clickId), click);
@@ -549,6 +548,9 @@ class AppStore {
         throw err;
       }
     }
+
+    this.clicks.push(click);
+    this.saveToDisk(); // Synchronously persist to local snapshot after remote persistence
   }
 
   public getRecentClicksForLink(linkId: string, limitCount = 50): ClickRecord[] {
@@ -567,9 +569,6 @@ class AppStore {
 
   // Sync Queue operations: DURABLE PERSISTENCE
   public async addToSyncQueue(item: SyncQueueItem): Promise<void> {
-    this.syncQueue.set(item.queueId, item);
-    this.saveToDisk(); // Persist to disk snapshot
-
     if (this.db) {
       try {
         await setDoc(doc(this.db, 'sync_queue', item.queueId), item);
@@ -578,6 +577,9 @@ class AppStore {
         throw err;
       }
     }
+
+    this.syncQueue.set(item.queueId, item);
+    this.saveToDisk(); // Persist to local snapshot after remote persistence
   }
 
   public async getSyncQueue(filter: 'all' | 'pending' | 'failed' | 'unresolved' = 'unresolved'): Promise<SyncQueueItem[]> {
