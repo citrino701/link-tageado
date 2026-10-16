@@ -8,7 +8,7 @@ const CLICK_HEADERS = [
   "data_hora", "link_id", "nome_link", "campanha", "destino_url", "origem",
   "utm_source", "utm_medium", "utm_campaign", "utm_content", "utm_term",
   "referenciador", "navegador", "idioma", "fuso_horario",
-  "offset_fuso_minutos", "visitor_id", "suspeito_bot"
+  "offset_fuso_minutos", "visitor_id", "suspeito_bot", "click_id"
 ];
 
 const FAILURE_HEADERS = [
@@ -37,6 +37,7 @@ function setupTracker() {
   migrateLinksSchema_(links);
   ensureFailureSheet_(registry);
   Logger.log("Planilha central: " + registry.getUrl());
+  installRetryTrigger_();
   return registry.getUrl();
 }
 
@@ -45,7 +46,8 @@ function setupTracker() {
  * owner and allows anyone to access it; visitors never authenticate.
  */
 function doGet(e) {
-  const params = (e && e.parameter) || {};
+  const params = Object.assign({}, (e && e.parameter) || {});
+  if (!params.click_id) params.click_id = Utilities.getUuid();
   const linkId = String(params.id || "").trim();
   let destination = "";
   let result;
@@ -183,11 +185,26 @@ function appendClick_(config, params) {
     fuso_horario: safeCell_(params.tz || ""),
     offset_fuso_minutos: safeCell_(params.tzoffset || ""),
     visitor_id: safeCell_(params.visitor_id || ""),
-    suspeito_bot: isBot_(userAgent)
+    suspeito_bot: isBot_(userAgent),
+    click_id: safeCell_(params.click_id || "")
   };
-  sheet.appendRow(headers.map(function (header) {
+  const row = headers.map(function (header) {
     return values[header] === undefined ? "" : values[header];
-  }));
+  });
+
+  if (params.__retry) {
+    const lock = LockService.getScriptLock();
+    lock.waitLock(10000);
+    try {
+      if (clickIdExists_(sheet, headers, params.click_id)) return;
+      sheet.appendRow(row);
+    } finally {
+      lock.releaseLock();
+    }
+    return;
+  }
+
+  sheet.appendRow(row);
 }
 
 function ensureClickSheet_(spreadsheet, tabName) {
@@ -219,6 +236,70 @@ function ensureClickSheet_(spreadsheet, tabName) {
     }
   });
   return sheet;
+}
+
+function clickIdExists_(sheet, headers, clickId) {
+  const id = String(clickId || "").trim();
+  const column = headers.click_id;
+  if (!id || column === undefined || sheet.getLastRow() < 2) return false;
+  return !!sheet.getRange(2, column + 1, sheet.getLastRow() - 1, 1)
+    .createTextFinder(id).matchEntireCell(true).findNext();
+}
+
+function installRetryTrigger_() {
+  const exists = ScriptApp.getProjectTriggers().some(function (trigger) {
+    return trigger.getHandlerFunction() === "retryFailedClicks";
+  });
+  if (!exists) {
+    ScriptApp.newTrigger("retryFailedClicks").timeBased().everyMinutes(15).create();
+  }
+}
+
+function retryFailedClicks() {
+  const registry = getRegistry_();
+  const sheet = registry.getSheetByName("Falhas");
+  if (!sheet || sheet.getLastRow() < 2) return { success: true, processed: 0 };
+
+  const headers = ensureFailureSheet_(registry);
+  const values = sheet.getDataRange().getValues();
+  const payloadColumn = headers.payload_json;
+  const statusColumn = headers.status;
+  const attemptsColumn = headers.tentativas;
+  const errorColumn = headers.erro;
+  const startedAt = Date.now();
+  let processed = 0;
+  let attempted = 0;
+
+  for (let i = 1; i < values.length; i++) {
+    if (Date.now() - startedAt > 4 * 60 * 1000) break;
+    const row = values[i];
+    if (String(row[statusColumn] || "") === "resolved") continue;
+    const payloadText = String(row[payloadColumn] || "");
+    if (!payloadText) continue;
+
+    try {
+      const payload = JSON.parse(payloadText);
+      const config = payload.config;
+      if (!config || !config.spreadsheetId) continue;
+      const params = payload.params || {};
+      if (!params.click_id) params.click_id = Utilities.getUuid();
+      params.__retry = true;
+      payload.params = params;
+      sheet.getRange(i + 1, payloadColumn + 1).setValue(JSON.stringify(payload));
+      appendClick_(config, params);
+      sheet.getRange(i + 1, statusColumn + 1).setValue("resolved");
+      sheet.getRange(i + 1, attemptsColumn + 1).setValue(Number(row[attemptsColumn] || 0) + 1);
+      processed++;
+      attempted++;
+    } catch (error) {
+      sheet.getRange(i + 1, statusColumn + 1).setValue("pending");
+      sheet.getRange(i + 1, attemptsColumn + 1).setValue(Number(row[attemptsColumn] || 0) + 1);
+      sheet.getRange(i + 1, errorColumn + 1).setValue(error.message || String(error));
+      attempted++;
+    }
+  }
+
+  return { success: true, processed: processed, attempted: attempted };
 }
 
 function ensureFailureSheet_(registry) {
