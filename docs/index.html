@@ -30,6 +30,22 @@
     const params = new URLSearchParams(window.location.search);
     const linkId = (params.get("id") || "").trim();
 
+    function visitorId() {
+      const key = "hub_link_visitor_id";
+      try {
+        let value = localStorage.getItem(key);
+        if (!value) {
+          value = window.crypto && crypto.randomUUID
+            ? crypto.randomUUID()
+            : "v-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2);
+          localStorage.setItem(key, value);
+        }
+        return value;
+      } catch (_) {
+        return "";
+      }
+    }
+
     function showError(message) {
       const card = document.getElementById("status");
       card.classList.add("error");
@@ -54,6 +70,7 @@
         query.set("lang", (navigator.language || "").slice(0, 80));
         query.set("tz", (Intl.DateTimeFormat().resolvedOptions().timeZone || "").slice(0, 80));
         query.set("tzoffset", String(new Date().getTimezoneOffset()));
+        query.set("visitor_id", visitorId());
         query.set("callback", "window.__hubLinkResponse");
 
         window.__hubLinkResponse = function (result) {
