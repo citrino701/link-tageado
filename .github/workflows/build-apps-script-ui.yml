@@ -1,6 +1,15 @@
 name: Build Apps Script UI assets
 
 on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "src/**"
+      - "package.json"
+      - "vite.config.ts"
+      - "vite.gas.config.ts"
+      - ".github/workflows/build-apps-script-ui.yml"
   push:
     branches:
       - main
@@ -33,6 +42,7 @@ jobs:
         run: npm run build:gas-ui
 
       - name: Publish generated assets to Pages source
+        if: github.event_name == 'push'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
