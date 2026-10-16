@@ -15,7 +15,7 @@ const CLICK_HEADERS = [
   "data_hora", "link_id", "nome_link", "campanha", "destino_url", "origem",
   "utm_source", "utm_medium", "utm_campaign", "utm_content", "utm_term",
   "referenciador", "navegador", "idioma", "fuso_horario",
-  "offset_fuso_minutos", "visitor_id", "suspeito_bot"
+  "offset_fuso_minutos", "visitor_id", "suspeito_bot", "click_id"
 ];
 
 const FAILURE_HEADERS = [
@@ -492,9 +492,11 @@ function getFailureQueue_() {
     const status = String(value_(row, headers, "status") || "failed");
     if (status === "resolved") continue;
     const config = findLinkConfig_(linkId);
+    let payload = {};
+    try { payload = JSON.parse(String(value_(row, headers, "payload_json") || "{}")); } catch (ignored) {}
     queue.push({
       queueId: String(i),
-      clickId: "",
+      clickId: String(payload.params && payload.params.click_id || ""),
       linkId: linkId,
       linkName: config ? config.name : "Link " + linkId,
       spreadsheetId: config ? config.spreadsheetId : "",
@@ -529,7 +531,11 @@ function retryFailures_() {
       const payload = JSON.parse(payloadText);
       const config = payload.config;
       if (!config || !config.spreadsheetId) throw new Error("Dados do evento estão incompletos.");
-      appendClickForConfig_(config, payload.params || {});
+      const params = payload.params || {};
+      if (!params.click_id) params.click_id = Utilities.getUuid();
+      payload.params = params;
+      sheet.getRange(i + 1, payloadColumn + 1).setValue(JSON.stringify(payload));
+      appendClickForConfig_(config, params);
       sheet.getRange(i + 1, statusColumn + 1).setValue("resolved");
       const attempts = attemptsColumn === undefined ? 0 : Number(row[attemptsColumn] || 0);
       sheet.getRange(i + 1, attemptsColumn + 1).setValue(attempts + 1);
@@ -571,11 +577,13 @@ function appendClickForConfig_(config, params) {
   const sheet = ensureClickSheet_(spreadsheet, config.aba || "Cliques");
   const headers = headerMap_(sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0]);
   const userAgent = String(params.ua || "");
+  const clickId = String(params.click_id || Utilities.getUuid());
+  params.click_id = clickId;
   const values = {
     data_hora: new Date(),
     link_id: config.id,
-    nome_link: safeCell_(config.name || ""),
-    campanha: safeCell_(config.campaign || ""),
+    nome_link: safeCell_(config.name || config.nome || ""),
+    campanha: safeCell_(config.campaign || config.campanha || ""),
     destino_url: safeCell_(config.destinoUrl || ""),
     origem: safeCell_(params.origem || config.source || "Direto"),
     utm_source: safeCell_(params.utm_source || config.source || ""),
@@ -589,13 +597,29 @@ function appendClickForConfig_(config, params) {
     fuso_horario: safeCell_(params.tz || ""),
     offset_fuso_minutos: safeCell_(params.tzoffset || ""),
     visitor_id: safeCell_(params.visitor_id || ""),
-    suspeito_bot: isBot_(userAgent)
+    suspeito_bot: isBot_(userAgent),
+    click_id: safeCell_(clickId)
   };
   const row = [];
   Object.keys(headers).sort(function (a, b) { return headers[a] - headers[b]; }).forEach(function (name) {
     row.push(values[name] === undefined ? "" : values[name]);
   });
-  sheet.appendRow(row);
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    if (clickIdExists_(sheet, headers, clickId)) return;
+    sheet.appendRow(row);
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function clickIdExists_(sheet, headers, clickId) {
+  const id = String(clickId || "").trim();
+  const column = headers.click_id;
+  if (!id || column === undefined || sheet.getLastRow() < 2) return false;
+  return !!sheet.getRange(2, column + 1, sheet.getLastRow() - 1, 1)
+    .createTextFinder(id).matchEntireCell(true).findNext();
 }
 
 function ensureClickSheet_(spreadsheet, name) {
@@ -610,6 +634,11 @@ function ensureClickSheet_(spreadsheet, name) {
   const lastColumn = Math.max(sheet.getLastColumn(), 1);
   const existing = sheet.getRange(1, 1, 1, lastColumn).getValues()[0].map(function (v) { return String(v).trim(); });
   const existingMap = headerMap_(existing);
+  CLICK_HEADERS.slice(0, 16).forEach(function (header) {
+    if (existingMap[header] === undefined) {
+      throw new Error('A aba "' + name + '" tem cabeçalho diferente. Escolha uma aba vazia ou use Cliques.');
+    }
+  });
   CLICK_HEADERS.forEach(function (header) {
     if (existingMap[header] === undefined) {
       const next = sheet.getLastColumn() + 1;
