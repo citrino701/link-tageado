@@ -92,11 +92,15 @@ class FirestoreRestClient {
     const documents: any[] = [];
     let pageToken: string | undefined;
     do {
-      const response = await this.request('GET', this.basePath, undefined, {
-        collectionId: collectionName,
+      const response = await this.request(
+        'GET',
+        `${this.basePath}/${encodeURIComponent(collectionName)}`,
+        undefined,
+        {
         pageSize: 1000,
         ...(pageToken ? { pageToken } : {}),
-      });
+        }
+      );
       documents.push(...(response.data.documents || []));
       pageToken = response.data.nextPageToken;
     } while (pageToken);
