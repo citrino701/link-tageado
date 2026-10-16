@@ -23,6 +23,10 @@ test('decryptToken throws if tampered with or with wrong key', () => {
   assert.throws(() => decryptToken(encrypted, wrongKey));
 });
 
+test('rejects encryption when the key is missing', () => {
+  assert.throws(() => encryptToken('token', ''));
+});
+
 test('handles empty token gracefully', () => {
   assert.equal(encryptToken('', 'key'), '');
   assert.equal(decryptToken('', 'key'), '');
