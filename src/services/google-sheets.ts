@@ -8,8 +8,7 @@ import {
 import { decryptToken } from '../utils/crypto-helpers.ts';
 import { store, LinkRecord, ClickRecord, SyncQueueItem } from './store.ts';
 
-const TOKEN_ENCRYPTION_KEY =
-  process.env.TOKEN_ENCRYPTION_KEY || '1e93effa9667afbbd795ea9c038f41500e30eb1f99358bde48f51d5878fa8ab3';
+const TOKEN_ENCRYPTION_KEY = process.env.TOKEN_ENCRYPTION_KEY || '';
 
 export class GoogleSheetsService {
   private oauth2Client: any = null;
