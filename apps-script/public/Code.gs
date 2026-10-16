@@ -73,7 +73,8 @@ function doGet(e) {
       };
     }
   } catch (error) {
-    if (linkId) saveFailure_(linkId, error, null, params);
+    // Requests for unknown/inactive IDs cannot be retried; do not let arbitrary
+    // public requests fill the persistent failure queue.
     result = {
       ok: false,
       destination: destination,
