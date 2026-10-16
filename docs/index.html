@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="strict-origin-when-cross-origin">
+  <title>Abrindo link…</title>
+  <style>
+    :root { color-scheme: light; font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+    body { min-height: 100vh; margin: 0; display: grid; place-items: center; background: #f6f7fb; color: #172033; }
+    main { width: min(28rem, calc(100% - 2rem)); box-sizing: border-box; padding: 2rem; background: #fff; border: 1px solid #e4e7ef; border-radius: 1rem; box-shadow: 0 1rem 3rem #17203312; text-align: center; }
+    .mark { width: 2.6rem; height: 2.6rem; margin: 0 auto 1rem; border: .25rem solid #e5e9f2; border-top-color: #4f46e5; border-radius: 50%; animation: spin .8s linear infinite; }
+    h1 { margin: 0 0 .5rem; font-size: 1.2rem; }
+    p { margin: 0; color: #687187; line-height: 1.5; }
+    a { color: #4338ca; }
+    .error .mark { display: none; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    @media (prefers-reduced-motion: reduce) { .mark { animation: none; } }
+  </style>
+</head>
+<body>
+  <main id="status" aria-live="polite">
+    <div class="mark" aria-hidden="true"></div>
+    <h1 id="title">Abrindo o link…</h1>
+    <p id="message">Registrando o acesso e encaminhando você.</p>
+  </main>
+  <script>
+    // Troque pelo URL /exec da implantação pública do Apps Script.
+    const SCRIPT_URL = "COLE_AQUI_O_URL_EXEC_DO_APPS_SCRIPT";
+    const params = new URLSearchParams(window.location.search);
+    const linkId = (params.get("id") || "").trim();
+
+    function showError(message) {
+      const card = document.getElementById("status");
+      card.classList.add("error");
+      document.getElementById("title").textContent = "Não foi possível abrir este link";
+      document.getElementById("message").textContent = message;
+    }
+
+    if (SCRIPT_URL.includes("COLE_AQUI")) {
+      showError("A página ponte ainda precisa receber o URL /exec do Apps Script.");
+    } else if (!/^[-A-Za-z0-9_]{3,80}$/.test(linkId)) {
+      showError("O identificador do link está ausente ou inválido.");
+    } else {
+      const endpoint = new URL(SCRIPT_URL);
+      if (endpoint.protocol !== "https:") {
+        showError("O endpoint configurado não é HTTPS.");
+      } else {
+        const query = new URLSearchParams(window.location.search);
+        query.set("id", linkId);
+        query.set("origem", query.get("origem") || "Direto");
+        query.set("ref", (document.referrer || "").slice(0, 500));
+        query.set("ua", (navigator.userAgent || "").slice(0, 400));
+        query.set("lang", (navigator.language || "").slice(0, 80));
+        query.set("tz", (Intl.DateTimeFormat().resolvedOptions().timeZone || "").slice(0, 80));
+        query.set("tzoffset", String(new Date().getTimezoneOffset()));
+        query.set("callback", "window.__hubLinkResponse");
+
+        window.__hubLinkResponse = function (result) {
+          const destination = String(result && result.destination || "");
+          let target;
+          try { target = new URL(destination); } catch (_) { showError("O destino cadastrado para este link é inválido."); return; }
+          if (target.protocol !== "https:" && target.protocol !== "http:") {
+            showError("O destino cadastrado precisa usar HTTP ou HTTPS.");
+            return;
+          }
+          // Preserva a navegação mesmo se a planilha estiver temporariamente indisponível.
+          window.location.replace(target.href);
+        };
+
+        const script = document.createElement("script");
+        script.async = true;
+        script.src = endpoint.toString() + (endpoint.search ? "&" : "?") + query.toString();
+        script.onerror = function () { showError("O serviço de registro não respondeu. Tente novamente em instantes."); };
+        document.head.appendChild(script);
+
+        window.setTimeout(function () {
+          if (document.getElementById("title").textContent === "Abrindo o link…") {
+            showError("O serviço demorou demais para responder. Tente novamente.");
+          }
+        }, 12000);
+      }
+    }
+  </script>
+</body>
+</html>
