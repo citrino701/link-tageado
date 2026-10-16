@@ -588,7 +588,7 @@ function appendClickForConfig_(config, params) {
     origem: safeCell_(params.origem || config.source || "Direto"),
     utm_source: safeCell_(params.utm_source || config.source || ""),
     utm_medium: safeCell_(params.utm_medium || config.medium || ""),
-    utm_campaign: safeCell_(params.utm_campaign || config.campaign || ""),
+    utm_campaign: safeCell_(params.utm_campaign || config.campaign || config.campanha || ""),
     utm_content: safeCell_(params.utm_content || config.content || ""),
     utm_term: safeCell_(params.utm_term || ""),
     referenciador: safeCell_(params.ref || ""),
