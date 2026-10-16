@@ -277,7 +277,7 @@ export const CreateLinkModal: React.FC<CreateLinkModalProps> = ({
             {/* Action Buttons as requested */}
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 pt-2">
               <a
-                href={createdLink.shortPath}
+                href={buildPublicLink(createdLink)}
                 target="_blank"
                 rel="noreferrer"
                 className="flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-700 transition"
