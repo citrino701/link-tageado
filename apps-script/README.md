@@ -14,8 +14,10 @@ No projeto Apps Script que já recebe os cliques:
 
 1. Substitua o conteúdo de `Code.gs` pelo arquivo `apps-script/public/Code.gs`.
 2. Confirme em **Project Settings → Script Properties** que `TRACKER_REGISTRY_ID` continua apontando para a mesma planilha central.
-3. Em **Deploy → Manage deployments**, edite a implantação do app da Web e selecione **New version**. Mantenha **Execute as: Me** e **Who has access: Anyone**.
-4. Mantenha o mesmo URL terminado em `/exec`; a página pública usa esse endpoint.
+3. Se o projeto tiver um `appsscript.json` com escopos OAuth declarados manualmente, inclua `https://www.googleapis.com/auth/script.scriptapp`.
+4. No editor, rode `setupTracker()` novamente uma vez para autorizar e instalar a tentativa automática da fila a cada 15 minutos. Ela usa `click_id` para não duplicar uma linha durante o reprocessamento.
+5. Em **Deploy → Manage deployments**, edite a implantação do app da Web e selecione **New version**. Mantenha **Execute as: Me** e **Who has access: Anyone**.
+6. Mantenha o mesmo URL terminado em `/exec`; a página pública usa esse endpoint.
 
 O código acrescenta colunas de visitante/bot às abas de cliques existentes sem apagar as linhas de dados. A aba `Falhas` também ganha campos para permitir tentativas de reprocessamento.
 
