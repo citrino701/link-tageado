@@ -4,6 +4,9 @@ import path from "path";
 import { defineConfig } from "vite";
 
 export default defineConfig({
+  define: {
+    "process.env.NODE_ENV": JSON.stringify("production"),
+  },
   plugins: [react(), tailwindcss()],
   resolve: {
     alias: {
