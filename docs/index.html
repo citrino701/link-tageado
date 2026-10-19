@@ -72,8 +72,6 @@
       } else {
         const query = new URLSearchParams(window.location.search);
         query.set("id", linkId);
-        // Compact links resolve their origin/tags from the registry. Preserve
-        // explicit campaign parameters in older links without forcing "Direto".
         if (!query.get("origem") && query.get("utm_source")) {
           query.set("origem", query.get("utm_source"));
         }
@@ -84,28 +82,54 @@
         query.set("tzoffset", String(new Date().getTimezoneOffset()));
         query.set("visitor_id", visitorId());
         query.set("click_id", clickId());
-        query.set("callback", "window.__hubLinkResponse");
 
-        window.__hubLinkResponse = function (result) {
+        function openDestination(result) {
           const destination = String(result && result.destination || "");
+          if (!destination) {
+            showError(result && result.error || "O link não tem um destino válido.");
+            return;
+          }
           let target;
-          try { target = new URL(destination); } catch (_) { showError("O destino cadastrado para este link é inválido."); return; }
+          try { target = new URL(destination); } catch (_) {
+            showError("O destino cadastrado para este link é inválido.");
+            return;
+          }
           if (target.protocol !== "https:" && target.protocol !== "http:") {
             showError("O destino cadastrado precisa usar HTTP ou HTTPS.");
             return;
           }
-          // Preserva a navegação mesmo se a planilha estiver temporariamente indisponível.
           window.location.replace(target.href);
-        };
+        }
 
-        const script = document.createElement("script");
-        script.async = true;
-        script.src = endpoint.toString() + (endpoint.search ? "&" : "?") + query.toString();
-        script.onerror = function () { showError("O serviço de registro não respondeu. Tente novamente em instantes."); };
-        document.head.appendChild(script);
+        function useLegacyScript() {
+          const legacyQuery = new URLSearchParams(query);
+          legacyQuery.set("callback", "window.__hubLinkResponse");
+          window.__hubLinkResponse = openDestination;
+          const script = document.createElement("script");
+          script.async = true;
+          script.src = endpoint.toString() + (endpoint.search ? "&" : "?") + legacyQuery.toString();
+          script.onerror = function () {
+            showError("O serviço de registro não respondeu. Tente novamente em instantes.");
+          };
+          document.head.appendChild(script);
+        }
+
+        const fastEndpoint = new URL("/api/click", window.location.origin);
+        fastEndpoint.search = query.toString();
+        fetch(fastEndpoint.toString(), { method: "GET", cache: "no-store" })
+          .then(function (response) {
+            if (!response.ok) throw new Error("Fast redirect unavailable");
+            return response.json();
+          })
+          .then(function (result) {
+            if (!result || result.ok !== true) throw new Error("Fast redirect unavailable");
+            openDestination(result);
+          })
+          .catch(useLegacyScript);
 
         window.setTimeout(function () {
-          if (document.getElementById("title").textContent === "Abrindo o link…") {
+          const title = document.getElementById("title");
+          if (title && title.textContent === "Abrindo o link…") {
             showError("O serviço demorou demais para responder. Tente novamente.");
           }
         }, 12000);
