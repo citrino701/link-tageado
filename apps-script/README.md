@@ -6,7 +6,7 @@ A interface React continua sendo a do AI Studio, mas passa a ser servida por um 
 
 O projeto público já deve ter uma planilha central criada por `setupTracker()`. Copie o ID dessa planilha. O ID está na URL entre `/spreadsheets/d/` e `/edit`.
 
-Após mesclar esta migração, aguarde a ação **Build Apps Script UI assets** terminar. Ela publica os arquivos `docs/app/hub-app.js` e `docs/app/hub-app.css` usados pelo painel privado.
+Após mesclar, aguarde a ação **Build and deploy Link Tageado** terminar em Actions. O workflow gera `docs/app/hub-app.js` e `hub-app.css` e publica o conteúdo de `docs/` no GitHub Pages; o painel privado carrega esses arquivos.
 
 ## 1. Atualizar o rastreador público
 
@@ -50,9 +50,9 @@ Abra o URL `/exec` dessa implantação para usar o painel. O primeiro acesso dev
 
 ## 3. Publicar os arquivos da interface
 
-Em **GitHub → Settings → Pages**, deixe **Deploy from a branch**, branch `main`, pasta `/docs`. A ponte de cliques já fica em `docs/index.html`; o workflow acrescenta os arquivos React em `docs/app/`.
+Em **GitHub → Settings → Pages → Build and deployment**, selecione **GitHub Actions** como fonte. Não selecione uma branch. O workflow compila a interface, inclui os arquivos gerados em `docs/app/` e publica a pasta `docs/` como artefato do GitHub Pages.
 
-O workflow precisa poder escrever na branch `main`: em **Settings → Actions → General → Workflow permissions**, selecione **Read and write permissions**. Depois de mesclar mudanças na interface, aguarde o workflow finalizar; ele atualiza os arquivos usados pelo Apps Script.
+Não é necessário dar ao Actions permissão geral de escrita no conteúdo do repositório. O próprio workflow recebe somente as permissões específicas de publicação do Pages. Alterações em `src/`, `apps-script/` ou `docs/` na branch `main` disparam a compilação e publicação.
 
 ## 4. Testar o fluxo
 
