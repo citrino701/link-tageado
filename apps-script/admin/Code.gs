@@ -580,8 +580,13 @@ function updateLinkStatus_(id, status) {
           active: link.status === "active"
         }]);
       } catch (syncError) {
-        link.cloudflareSynced = false;
-        console.error("Cloudflare status sync failed:", syncError && syncError.message || syncError);
+        // Do not report a successful deactivation while KV still has the old state.
+        sheet.getRange(i + 1, statusColumn + 1).setValue(values[i][statusColumn]);
+        if (updatedColumn !== undefined) {
+          sheet.getRange(i + 1, updatedColumn + 1).setValue(values[i][updatedColumn]);
+        }
+        throw new Error("Não consegui sincronizar o status com o Cloudflare; mantive o status anterior. " +
+          (syncError.message || String(syncError)));
       }
     }
     return link || null;
