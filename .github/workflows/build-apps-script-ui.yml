@@ -1,21 +1,21 @@
-name: Build Apps Script UI assets
+name: Build and deploy Link Tageado
 
 on:
   pull_request:
-    branches:
-      - main
+    branches: [main]
     paths:
       - "src/**"
+      - "docs/**"
       - "package.json"
       - "vite.config.ts"
       - "vite.gas.config.ts"
       - "apps-script/**"
       - ".github/workflows/build-apps-script-ui.yml"
   push:
-    branches:
-      - main
+    branches: [main]
     paths:
       - "src/**"
+      - "docs/**"
       - "package.json"
       - "vite.config.ts"
       - "vite.gas.config.ts"
@@ -23,7 +23,7 @@ on:
       - ".github/workflows/build-apps-script-ui.yml"
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   build:
@@ -46,19 +46,27 @@ jobs:
           node --check --input-type=commonjs < apps-script/admin/Code.gs
           node -e "JSON.parse(require('node:fs').readFileSync('apps-script/admin/appsscript.json', 'utf8'))"
 
-
       - name: Build React assets for Apps Script
         run: npm run build:gas-ui
 
-      - name: Publish generated assets to Pages source
+      - name: Upload GitHub Pages artifact
         if: github.event_name == 'push'
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add docs/app/hub-app.js docs/app/hub-app.css
-          if git diff --cached --quiet; then
-            echo "No asset changes."
-          else
-            git commit -m "Build Apps Script UI assets"
-            git push
-          fi
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs
+
+  deploy:
+    if: github.event_name == 'push'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
