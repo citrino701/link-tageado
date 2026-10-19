@@ -40,22 +40,36 @@ export async function onRequestPost(context) {
     return json({ ok: false, error: "Envie entre 1 e 500 links por solicitação." }, 400);
   }
 
-  try {
-    for (const link of links) {
-      if (!validId(link && link.id)) {
-        return json({ ok: false, error: "ID de link inválido." }, 400);
-      }
-      if (link.removed === true) {
-        await context.env.LINKS.delete("link:" + link.id);
-        continue;
-      }
-      if (!validHttpUrl(link && link.destinationUrl)) {
-        return json({ ok: false, error: "Destino inválido para o link " + link.id + "." }, 400);
-      }
-      await context.env.LINKS.put("link:" + link.id, JSON.stringify({
+  // Validate the entire batch before changing KV, so a bad row cannot leave a
+  // partly synchronized batch behind.
+  const operations = [];
+  for (const link of links) {
+    if (!validId(link && link.id)) {
+      return json({ ok: false, error: "ID de link inválido." }, 400);
+    }
+    if (link.removed === true) {
+      operations.push({ id: link.id, removed: true });
+      continue;
+    }
+    if (!validHttpUrl(link && link.destinationUrl)) {
+      return json({ ok: false, error: "Destino inválido para o link " + link.id + "." }, 400);
+    }
+    operations.push({
+      id: link.id,
+      value: JSON.stringify({
         destinationUrl: String(link.destinationUrl),
         active: link.active !== false
-      }));
+      })
+    });
+  }
+
+  try {
+    for (const operation of operations) {
+      if (operation.removed) {
+        await context.env.LINKS.delete("link:" + operation.id);
+      } else {
+        await context.env.LINKS.put("link:" + operation.id, operation.value);
+      }
     }
   } catch (error) {
     console.error("Cloudflare link sync failed:", error && error.message || error);
