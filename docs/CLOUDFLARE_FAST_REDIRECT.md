@@ -1,6 +1,6 @@
 # Ativar o redirecionamento rápido no Cloudflare Pages
 
-Links novos e links já sincronizados continuam com o mesmo formato curto (`?id=...`). O middleware do Cloudflare lê o destino no KV e responde com redirecionamento HTTP 302, sem carregar a página intermediária e sem esperar o Apps Script gravar na planilha. O Apps Script continua recebendo e gravando cada clique em segundo plano.
+Links novos e links já sincronizados continuam com o mesmo formato curto (`?id=...`). O middleware do Cloudflare consulta o destino no KV e responde com redirecionamento HTTP 302, sem carregar a página intermediária e sem esperar o Apps Script gravar na planilha. O Apps Script continua recebendo e gravando cada clique em segundo plano.
 
 Se o KV ou a configuração ainda não estiverem prontos, a página ponte atual continua funcionando e chama o Apps Script como antes.
 
@@ -8,7 +8,7 @@ Se o KV ou a configuração ainda não estiverem prontos, a página ponte atual 
 
 1. No projeto Pages `linkshorter`, crie um namespace KV chamado `LINKS`.
 2. Em **Settings → Functions → KV namespace bindings**, adicione o binding com variável `LINKS` apontando para esse namespace.
-3. Em **Settings → Variables and Secrets`, configure:
+3. Em **Settings → Variables and Secrets**, configure:
    - `APPS_SCRIPT_URL`: URL `/exec` da implantação pública de rastreamento.
    - `SYNC_TOKEN`: um token longo e aleatório. Cadastre o mesmo valor como propriedade do Apps Script administrativo.
 4. Confirme que o **Root directory** do Pages é a raiz do repositório e que o **Build output directory** é `docs`. A pasta `functions` precisa ficar na raiz do projeto Pages.
@@ -32,4 +32,4 @@ Depois de atualizar e publicar uma nova versão do `Code.gs`, rode uma vez `sync
 3. Confira se o clique apareceu uma única vez na planilha da campanha.
 4. Crie um link de teste no painel, abra-o e confirme o destino e o registro na planilha.
 
-A Function usa KV para consultar o destino e o Apps Script recebe o evento em segundo plano. As cotas próprias do Cloudflare e do Apps Script continuam se aplicando.
+No plano gratuito, o KV inclui 100 mil leituras e 1.000 gravações por dia. Cada clique sincronizado faz uma leitura; cadastrar, alterar status ou excluir link faz uma gravação. As cotas do Apps Script continuam independentes.
