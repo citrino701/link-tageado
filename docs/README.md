@@ -6,7 +6,7 @@ O painel administrativo é servido separadamente por um web app Apps Script priv
 
 ## URL de um link
 
-Com GitHub Pages publicado em `main /docs`, o formato fica:
+Com o workflow publicando o GitHub Pages, o formato do link fica:
 
 ```text
 https://citrino701.github.io/link-tageado/?id=ID_DO_LINK&utm_source=instagram&utm_medium=social&utm_campaign=NOME_DA_CAMPANHA
