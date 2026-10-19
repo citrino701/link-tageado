@@ -261,6 +261,7 @@ function getAllLinks_() {
       id: id,
       name: String(value_(row, headers, "nome") || ""),
       spreadsheetId: spreadsheetId,
+      aba: String(value_(row, headers, "aba") || "Cliques"),
       spreadsheetUrl: String(value_(row, headers, "spreadsheetUrl") ||
         ("https://docs.google.com/spreadsheets/d/" + spreadsheetId + "/edit")),
       spreadsheetTitle: String(value_(row, headers, "spreadsheetTitle") || "Planilha Google"),
