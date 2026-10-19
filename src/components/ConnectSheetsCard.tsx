@@ -2,21 +2,13 @@ import React from 'react';
 import { FileSpreadsheet, ShieldCheck, CheckCircle2, ExternalLink } from 'lucide-react';
 
 interface ConnectSheetsCardProps {
-  isConnected: boolean;
-  isOAuthConfigured: boolean;
-  connectedEmail: string | null;
-  connectedAt: string | null;
   adminEmail: string;
-  onConnectGoogle: () => void;
-  onOpenConfigOAuth: () => void;
-  isLoading?: boolean;
+  setupAt: string | null;
 }
 
 export const ConnectSheetsCard: React.FC<ConnectSheetsCardProps> = ({
-  isConnected,
-  connectedEmail,
-  connectedAt,
   adminEmail,
+  setupAt,
 }) => {
   return (
     <section className="bg-gradient-to-r from-slate-900 via-slate-900 to-slate-850 border border-slate-800 rounded-2xl p-6 sm:p-8 shadow-xl">
@@ -27,11 +19,11 @@ export const ConnectSheetsCard: React.FC<ConnectSheetsCardProps> = ({
             <span>Painel privado do Apps Script</span>
           </div>
           <h2 className="text-xl sm:text-2xl font-bold text-slate-100 tracking-tight">
-            Planilhas conectadas pela sua conta Google
+            Planilhas acessadas pela sua conta Google
           </h2>
           <p className="text-sm text-slate-300 leading-relaxed">
-            O painel usa a autorização do próprio Apps Script para abrir as planilhas que você informar.
-            Quem recebe os links só acessa o redirecionamento; não precisa entrar no Google nem abrir este painel.
+            O Apps Script usa as permissões da sua conta para abrir as planilhas informadas e registrar os cliques.
+            Visitantes só seguem os links; não precisam entrar no Google nem abrir este painel.
           </p>
           <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-xs text-slate-400">
             <span className="inline-flex items-center gap-1.5">
@@ -51,15 +43,13 @@ export const ConnectSheetsCard: React.FC<ConnectSheetsCardProps> = ({
         </div>
         <div className="shrink-0 rounded-xl border border-slate-800 bg-slate-950/60 px-4 py-3">
           <div className="flex items-center gap-2 text-xs font-semibold">
-            <CheckCircle2 className={`w-4 h-4 ${isConnected ? 'text-emerald-400' : 'text-amber-400'}`} />
-            <span className={isConnected ? 'text-emerald-300' : 'text-amber-300'}>
-              {isConnected ? 'Acesso ativo' : 'Aguardando autorização'}
-            </span>
+            <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+            <span className="text-emerald-300">Acesso privado autorizado</span>
           </div>
-          <p className="mt-1 text-[11px] text-slate-400">{connectedEmail || adminEmail}</p>
-          {connectedAt && (
+          <p className="mt-1 text-[11px] text-slate-400">{adminEmail}</p>
+          {setupAt && (
             <p className="mt-1 text-[10px] text-slate-500">
-              Configurado em {new Date(connectedAt).toLocaleDateString('pt-BR')}
+              Painel configurado em {new Date(setupAt).toLocaleDateString('pt-BR')}
             </p>
           )}
         </div>

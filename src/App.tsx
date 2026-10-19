@@ -11,7 +11,7 @@ import {
   Tag,
 } from 'lucide-react';
 
-import { fetchAdminStatus, getGoogleAuthUrl, logoutAdmin } from './api.ts';
+import { fetchAdminStatus } from './api.ts';
 import { Navbar } from './components/Navbar.tsx';
 import { ConnectSheetsCard } from './components/ConnectSheetsCard.tsx';
 import { StatsOverview } from './components/StatsOverview.tsx';
@@ -19,22 +19,16 @@ import { CreateLinkModal } from './components/CreateLinkModal.tsx';
 import { LinkCard } from './components/LinkCard.tsx';
 import { SyncQueueModal } from './components/SyncQueueModal.tsx';
 import { DiagnosticTestsModal } from './components/DiagnosticTestsModal.tsx';
-import { ConfigOAuthModal } from './components/ConfigOAuthModal.tsx';
 import { LinkRecord, SyncQueueItem } from './services/store.ts';
 
 export default function App() {
-  const [currentUserEmail, setCurrentUserEmail] = useState<string | null>(null);
   const [adminEmail, setAdminEmail] = useState('hugoviajante@gmail.com');
-  const [isConnected, setIsConnected] = useState(false);
-  const [isOAuthConfigured, setIsOAuthConfigured] = useState(false);
-  const [connectedEmail, setConnectedEmail] = useState<string | null>(null);
-  const [connectedAt, setConnectedAt] = useState<string | null>(null);
+  const [setupAt, setSetupAt] = useState<string | null>(null);
 
   // Links & Stats
   const [links, setLinks] = useState<LinkRecord[]>([]);
   const [syncQueue, setSyncQueue] = useState<SyncQueueItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [isConnectingGoogle, setIsConnectingGoogle] = useState(false);
 
   // Filters & Search
   const [searchTerm, setSearchTerm] = useState('');
@@ -49,7 +43,6 @@ export default function App() {
 
   const [isQueueModalOpen, setIsQueueModalOpen] = useState(false);
   const [isTestsModalOpen, setIsTestsModalOpen] = useState(false);
-  const [isConfigOAuthModalOpen, setIsConfigOAuthModalOpen] = useState(false);
 
   // Toast
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
@@ -59,23 +52,6 @@ export default function App() {
     setTimeout(() => setToast(null), 4000);
   };
 
-  // Handle OAuth callback parameters in URL
-  useEffect(() => {
-    const urlParams = new URLSearchParams(window.location.search);
-    const authStatus = urlParams.get('auth');
-    const authError = urlParams.get('auth_error');
-
-    if (authStatus === 'success') {
-      showToast('Conta Google conectada com sucesso! Permissões persistentes ativadas.');
-      // Clean up URL
-      window.history.replaceState({}, document.title, window.location.pathname);
-    } else if (authError) {
-      showToast(decodeURIComponent(authError), 'error');
-      // Clean up URL
-      window.history.replaceState({}, document.title, window.location.pathname);
-    }
-  }, []);
-
   // Fetch initial app state
   const loadData = async () => {
     setIsLoading(true);
@@ -83,11 +59,7 @@ export default function App() {
       // 1. Status via backend API
       const statusData = await fetchAdminStatus();
       setAdminEmail(statusData.adminEmail || 'hugoviajante@gmail.com');
-      setIsOAuthConfigured(statusData.isOAuthConfigured);
-      setIsConnected(statusData.isConnected);
-      setConnectedEmail(statusData.connectedEmail);
-      setConnectedAt(statusData.connectedAt);
-      setCurrentUserEmail(statusData.currentUserEmail);
+      setSetupAt(statusData.setupAt || statusData.connectedAt || null);
 
       // 2. Links
       const linksRes = await fetch('/api/admin/links');
@@ -113,36 +85,6 @@ export default function App() {
     loadData();
   }, []);
 
-  // Connect Google Sheets flow via backend OAuth 2.0
-  const handleConnectGoogle = async () => {
-    setIsConnectingGoogle(true);
-    try {
-      const result = await getGoogleAuthUrl();
-      if (result.isConfigured && result.authUrl) {
-        // Redirect browser to Google's consent screen
-        window.location.href = result.authUrl;
-      } else {
-        showToast(
-          result.error ||
-            'Configure as variáveis GOOGLE_CLIENT_ID e GOOGLE_CLIENT_SECRET com seu próprio cliente OAuth.',
-          'error'
-        );
-      }
-    } catch (err: any) {
-      console.error('Google OAuth URL Error:', err);
-      showToast(err.message || 'Falha ao iniciar autorização com o Google.', 'error');
-    } finally {
-      setIsConnectingGoogle(false);
-    }
-  };
-
-  const handleLogout = async () => {
-    await logoutAdmin();
-    setCurrentUserEmail(null);
-    showToast('Sessão encerrada com sucesso.');
-    await loadData();
-  };
-
   // Toggle link status
   const handleToggleStatus = async (id: string, newStatus: 'active' | 'inactive') => {
     try {
@@ -150,7 +92,7 @@ export default function App() {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
-          'x-admin-email': currentUserEmail || adminEmail,
+          'x-admin-email': adminEmail,
         },
         body: JSON.stringify({ status: newStatus }),
       });
@@ -171,7 +113,7 @@ export default function App() {
       const res = await fetch(`/api/admin/links/${id}`, {
         method: 'DELETE',
         headers: {
-          'x-admin-email': currentUserEmail || adminEmail,
+          'x-admin-email': adminEmail,
         },
       });
       if (res.ok) {
@@ -187,7 +129,7 @@ export default function App() {
   const handleRetryQueue = async () => {
     const res = await fetch('/api/admin/queue/retry', {
       method: 'POST',
-      headers: { 'x-admin-email': currentUserEmail || adminEmail },
+      headers: { 'x-admin-email': adminEmail },
     });
     if (res.ok) {
       await loadData();
@@ -260,28 +202,16 @@ export default function App() {
 
       {/* Navbar */}
       <Navbar
-        currentUserEmail={currentUserEmail}
         adminEmail={adminEmail}
-        isConnected={isConnected}
-        connectedEmail={connectedEmail}
-        onConnectGoogle={handleConnectGoogle}
-        onLogout={handleLogout}
         onOpenTests={() => setIsTestsModalOpen(true)}
-        onOpenConfigOAuth={() => setIsConfigOAuthModalOpen(true)}
       />
 
       {/* Main Container */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
-        {/* Step 1: Connect Sheets Banner / Card */}
+        {/* Planilhas acessadas pelo Apps Script */}
         <ConnectSheetsCard
-          isConnected={isConnected}
-          isOAuthConfigured={isOAuthConfigured}
-          connectedEmail={connectedEmail}
-          connectedAt={connectedAt}
           adminEmail={adminEmail}
-          onConnectGoogle={handleConnectGoogle}
-          onOpenConfigOAuth={() => setIsConfigOAuthModalOpen(true)}
-          isLoading={isConnectingGoogle}
+          setupAt={setupAt}
         />
 
         {/* Step 2: KPI Metrics Overview */}
@@ -562,19 +492,9 @@ export default function App() {
         adminEmail={adminEmail}
       />
 
-      <ConfigOAuthModal
-        isOpen={isConfigOAuthModalOpen}
-        onClose={() => setIsConfigOAuthModalOpen(false)}
-        onSaved={async () => {
-          await loadData();
-          showToast('Credenciais salvas com sucesso! Agora clique em "Conectar Conta Google".');
-        }}
-        adminEmail={adminEmail}
-      />
-
       {/* Footer */}
       <footer className="border-t border-slate-800 py-6 text-center text-xs text-slate-400">
-        <p>Hub de Links Rastreáveis • Conexão permanente e determinística ao Google Sheets via OAuth 2.0</p>
+        <p>Hub de Links Rastreáveis • Painel privado no Apps Script • Links públicos no GitHub Pages</p>
       </footer>
     </div>
   );
