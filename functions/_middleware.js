@@ -67,6 +67,13 @@ export async function onRequest(context) {
   if (!context.env.LINKS || !context.env.APPS_SCRIPT_URL) {
     return context.next();
   }
+  let scriptUrl;
+  try {
+    scriptUrl = new URL(String(context.env.APPS_SCRIPT_URL));
+    if (scriptUrl.protocol !== "https:") return context.next();
+  } catch (_) {
+    return context.next();
+  }
 
   let link;
   try {
@@ -102,7 +109,7 @@ export async function onRequest(context) {
   const visitorId = cookieValue(request, "hub_link_visitor_id") || crypto.randomUUID();
   const clickId = crypto.randomUUID();
   context.waitUntil(
-    logClick(context.env.APPS_SCRIPT_URL, request, id, visitorId, clickId)
+    logClick(scriptUrl.toString(), request, id, visitorId, clickId)
       .catch(function (error) {
         console.error("Background click logging failed:", error && error.message || error);
       })
