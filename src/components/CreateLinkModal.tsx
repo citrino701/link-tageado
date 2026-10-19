@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import {
   X,
   Plus,
@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { extractSpreadsheetId, buildWhatsAppUrl, validateDestinationUrl } from '../utils/sheets-helpers.ts';
 import { LinkRecord } from '../services/store.ts';
+import { campaignCatalog, campaignsForSheet, resolveCampaign, type CampaignTarget } from '../utils/campaigns.ts';
 import { buildPublicLink } from '../utils/public-link.ts';
 
 interface CreateLinkModalProps {
@@ -22,6 +23,7 @@ interface CreateLinkModalProps {
   onClose: () => void;
   onLinkCreated: (newLink: LinkRecord) => void;
   adminEmail: string;
+  links: LinkRecord[];
 }
 
 const ORIGIN_PRESETS = [
@@ -38,6 +40,7 @@ export const CreateLinkModal: React.FC<CreateLinkModalProps> = ({
   onClose,
   onLinkCreated,
   adminEmail,
+  links,
 }) => {
   // Form fields
   const [name, setName] = useState('');
@@ -47,6 +50,14 @@ export const CreateLinkModal: React.FC<CreateLinkModalProps> = ({
   const [whatsappMessage, setWhatsappMessage] = useState('');
   const [destinationUrl, setDestinationUrl] = useState('');
   const [campaign, setCampaign] = useState('');
+  const [campaignMode, setCampaignMode] = useState<'existing' | 'new'>('existing');
+  const [aba, setAba] = useState('');
+  const [associationMessage, setAssociationMessage] = useState('');
+  const validationVersion = useRef(0);
+  const catalog = useMemo(() => campaignCatalog(links), [links]);
+  const effectiveMode = catalog.length ? campaignMode : 'new';
+  const selectedCampaign = catalog.find(c => c.name === campaign);
+
   const [source, setSource] = useState('Instagram_Stories');
   const [medium, setMedium] = useState('Social');
   const [content, setContent] = useState('');
@@ -66,7 +77,70 @@ export const CreateLinkModal: React.FC<CreateLinkModalProps> = ({
 
   if (!isOpen) return null;
 
+  const invalidateSheetValidation = () => {
+    validationVersion.current++;
+    setSheetValidation(null);
+    setIsValidatingSheet(false);
+  };
+
+  const useTarget = (target: CampaignTarget) => {
+    setSpreadsheetUrl(target.spreadsheetUrl);
+    setAba(target.aba);
+    invalidateSheetValidation();
+  };
+
+  const selectCampaign = (value: string) => {
+    setCampaign(value);
+    setCampaignMode('existing');
+    const entry = catalog.find(c => c.name === value);
+    if (entry?.targets.length === 1) {
+      useTarget(entry.targets[0]);
+      setAssociationMessage('Planilha preenchida automaticamente pela campanha.');
+    } else {
+      setSpreadsheetUrl('');
+      setAba('');
+      invalidateSheetValidation();
+      setAssociationMessage(entry ? 'Esta campanha tem mais de uma planilha ou aba. Escolha abaixo.' : '');
+    }
+  };
+
+  const changeSpreadsheet = (value: string) => {
+    setSpreadsheetUrl(value);
+    setAba('');
+    invalidateSheetValidation();
+    const matches = campaignsForSheet(catalog, value);
+    const current = matches.find(c => c.name === campaign);
+    const match = matches.length === 1 ? matches[0] : current;
+    if (match) {
+      setCampaign(match.name);
+      setCampaignMode('existing');
+      const targets = match.targets.filter(t => t.spreadsheetId === extractSpreadsheetId(value));
+      if (targets.length === 1) setAba(targets[0].aba);
+      setAssociationMessage(`Campanha reconhecida: ${match.name}.`);
+    } else if (matches.length > 1) {
+      setCampaign('');
+      setCampaignMode('existing');
+      setAssociationMessage('Esta planilha pertence a mais de uma campanha. Selecione a campanha desejada.');
+    } else {
+      setAssociationMessage('');
+      if (extractSpreadsheetId(value) && effectiveMode === 'existing') {
+        setCampaign('');
+        setCampaignMode('new');
+      }
+    }
+  };
+
+  const changeCampaignMode = (mode: 'existing' | 'new') => {
+    setCampaignMode(mode);
+    setCampaign('');
+    setSpreadsheetUrl('');
+    setAba('');
+    setAssociationMessage('');
+    invalidateSheetValidation();
+  };
+
   const handleValidateSheet = async () => {
+    const version = ++validationVersion.current;
     const extractedId = extractSpreadsheetId(spreadsheetUrl);
     if (!extractedId) {
       setSheetValidation({ valid: false, error: 'URL ou ID de planilha inválido.' });
@@ -80,9 +154,10 @@ export const CreateLinkModal: React.FC<CreateLinkModalProps> = ({
       const res = await fetch('/api/admin/validate-sheet', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'x-admin-email': adminEmail },
-        body: JSON.stringify({ spreadsheetUrl }),
+        body: JSON.stringify({ spreadsheetUrl, aba: aba || 'Cliques' }),
       });
       const data = await res.json();
+      if (version !== validationVersion.current) return;
       if (res.ok && data.success) {
         setSheetValidation({
           valid: true,
@@ -91,20 +166,16 @@ export const CreateLinkModal: React.FC<CreateLinkModalProps> = ({
         });
       } else {
         setSheetValidation({
-          valid: true, // Still allow submission if ID is valid even if sheet permissions are pending
-          title: 'Planilha identificada (ID extraído)',
+          valid: false,
           id: extractedId,
           error: data.error,
         });
       }
     } catch (e: any) {
-      setSheetValidation({
-        valid: true,
-        id: extractedId,
-        title: 'Planilha válida',
-      });
+      if (version !== validationVersion.current) return;
+      setSheetValidation({ valid: false, error: e.message || 'Não foi possível verificar a planilha.' });
     } finally {
-      setIsValidatingSheet(false);
+      if (version === validationVersion.current) setIsValidatingSheet(false);
     }
   };
 
@@ -126,9 +197,11 @@ export const CreateLinkModal: React.FC<CreateLinkModalProps> = ({
     e.preventDefault();
     setErrorMessage(null);
 
-    const spreadsheetId = extractSpreadsheetId(spreadsheetUrl);
-    if (!spreadsheetId) {
-      setErrorMessage('Cole um link válido da Planilha Google.');
+    let association;
+    try {
+      association = resolveCampaign(catalog, campaign, spreadsheetUrl, aba);
+    } catch (error: any) {
+      setErrorMessage(error.message);
       return;
     }
 
@@ -146,11 +219,6 @@ export const CreateLinkModal: React.FC<CreateLinkModalProps> = ({
       }
     }
 
-    if (!campaign.trim()) {
-      setErrorMessage('Defina o nome da campanha.');
-      return;
-    }
-
     setIsSubmitting(true);
 
     try {
@@ -162,12 +230,13 @@ export const CreateLinkModal: React.FC<CreateLinkModalProps> = ({
         },
         body: JSON.stringify({
           name,
-          spreadsheetUrl,
+          spreadsheetUrl: association.spreadsheetUrl,
+          aba: association.aba,
           destinationType,
           destinationUrl,
           whatsappNumber,
           whatsappMessage,
-          campaign,
+          campaign: association.campaign,
           source,
           medium,
           content,
@@ -203,6 +272,10 @@ export const CreateLinkModal: React.FC<CreateLinkModalProps> = ({
     setWhatsappMessage('');
     setDestinationUrl('');
     setCampaign('');
+    setCampaignMode('existing');
+    setAba('');
+    setAssociationMessage('');
+    invalidateSheetValidation();
     setSource('Instagram_Stories');
     setMedium('Social');
     setContent('');
@@ -212,8 +285,8 @@ export const CreateLinkModal: React.FC<CreateLinkModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm overflow-y-auto">
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-2xl shadow-2xl overflow-hidden my-8">
+    <div className="fixed inset-0 z-50 p-4 bg-slate-950/80 backdrop-blur-sm overflow-y-auto">
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-2xl shadow-2xl overflow-hidden mx-auto my-4">
         {/* Header */}
         <div className="px-6 py-4 border-b border-slate-800 flex items-center justify-between bg-slate-900/60">
           <div className="flex items-center gap-2.5">
@@ -334,22 +407,69 @@ export const CreateLinkModal: React.FC<CreateLinkModalProps> = ({
               />
             </div>
 
+            <fieldset className="space-y-3 rounded-xl border border-slate-700 bg-slate-950/30 p-4">
+              <legend className="px-1 text-xs font-semibold text-slate-200">Campanha *</legend>
+              <div className="grid grid-cols-2 gap-2" role="group" aria-label="Tipo de campanha">
+                {(['existing', 'new'] as const).map(mode => (
+                  <button key={mode} type="button" aria-pressed={effectiveMode === mode}
+                    disabled={mode === 'existing' && catalog.length === 0}
+                    onClick={() => changeCampaignMode(mode)}
+                    className={`rounded-lg border px-3 py-2 text-xs font-semibold transition disabled:opacity-40 ${effectiveMode === mode ? 'border-emerald-500 bg-emerald-600/15 text-emerald-400' : 'border-slate-700 text-slate-400 hover:border-slate-500'}`}>
+                    {mode === 'existing' ? 'Campanha existente' : 'Nova campanha'}
+                  </button>
+                ))}
+              </div>
+              {effectiveMode === 'existing' ? (
+                <div>
+                  <label htmlFor="campaign-select" className="block mb-1 text-xs text-slate-300">Selecione a campanha</label>
+                  <select id="campaign-select" required value={campaign} onChange={e => selectCampaign(e.target.value)}
+                    className="w-full px-3 py-2.5 rounded-lg bg-slate-800 border border-slate-700 text-slate-100 text-sm focus:outline-none focus:border-emerald-500">
+                    <option value="">Escolha uma campanha</option>
+                    {catalog.map(c => <option key={c.name} value={c.name}>{c.name}</option>)}
+                  </select>
+                </div>
+              ) : (
+                <div>
+                  <label htmlFor="campaign-name" className="block mb-1 text-xs text-slate-300">Nome da nova campanha</label>
+                  <input id="campaign-name" type="text" required value={campaign} onChange={e => setCampaign(e.target.value)}
+                    onBlur={() => {
+                      const existing = catalog.find(c => c.name.toLowerCase() === campaign.trim().toLowerCase());
+                      if (existing) selectCampaign(existing.name);
+                    }}
+                    placeholder="Ex: Primavera_2026"
+                    className="w-full px-3 py-2.5 rounded-lg bg-slate-800 border border-slate-700 text-slate-100 placeholder-slate-500 text-sm focus:outline-none focus:border-emerald-500" />
+                  <p className="mt-2 text-xs text-slate-400">A campanha será cadastrada junto com este link.</p>
+                </div>
+              )}
+              {effectiveMode === 'existing' && selectedCampaign && selectedCampaign.targets.length > 1 && (
+                <div>
+                  <label htmlFor="campaign-sheet" className="block mb-1 text-xs text-slate-300">Planilha e aba da campanha</label>
+                  <select id="campaign-sheet" required
+                    value={selectedCampaign.targets.findIndex(t => t.spreadsheetId === extractSpreadsheetId(spreadsheetUrl) && t.aba === aba)}
+                    onChange={e => { const target = selectedCampaign.targets[Number(e.target.value)]; if (target) useTarget(target); }}
+                    className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-sm text-slate-100">
+                    <option value={-1}>Escolha onde registrar os cliques</option>
+                    {selectedCampaign.targets.map((t, i) => <option key={`${t.spreadsheetId}:${t.aba}`} value={i}>{t.title} · {t.aba} · {t.spreadsheetId.slice(-6)}</option>)}
+                  </select>
+                </div>
+              )}
+              <p className="text-xs text-emerald-400" role="status">{associationMessage || (effectiveMode === 'existing' ? 'Escolha a campanha para preencher a planilha automaticamente. Você também pode colar uma planilha abaixo.' : 'Cole a planilha que receberá os cliques desta campanha.')}</p>
+            </fieldset>
+
             {/* 2. Link da Planilha Google */}
             <div>
-              <label className="block text-xs font-semibold text-slate-200 mb-1.5">
+              <label htmlFor="spreadsheet-url" className="block text-xs font-semibold text-slate-200 mb-1.5">
                 Link da Planilha Google <span className="text-emerald-400">*</span>
               </label>
               <div className="flex gap-2">
                 <div className="relative flex-1">
                   <FileSpreadsheet className="w-4 h-4 text-emerald-400 absolute left-3.5 top-3" />
                   <input
-                    type="url"
-                    required
+                    id="spreadsheet-url"
+                    type="text"
+                    required={effectiveMode === 'new'}
                     value={spreadsheetUrl}
-                    onChange={(e) => {
-                      setSpreadsheetUrl(e.target.value);
-                      setSheetValidation(null);
-                    }}
+                    onChange={(e) => changeSpreadsheet(e.target.value)}
                     placeholder="https://docs.google.com/spreadsheets/d/1BxiMVs0XRA5.../edit"
                     className="w-full pl-10 pr-3.5 py-2.5 rounded-xl bg-slate-800/80 border border-slate-700 text-slate-100 placeholder-slate-500 text-sm focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition font-mono text-xs"
                   />
@@ -372,11 +492,8 @@ export const CreateLinkModal: React.FC<CreateLinkModalProps> = ({
                       : 'bg-rose-950/20 border-rose-500/30 text-rose-400'
                   }`}
                 >
-                  <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
-                  <span>
-                    <strong>{sheetValidation.title || 'Planilha identificada'}:</strong> ID {sheetValidation.id}. As abas
-                    Links, Cliques e Resumo serão mantidas automaticamente.
-                  </span>
+                  {sheetValidation.valid ? <CheckCircle2 className="w-3.5 h-3.5 shrink-0" /> : <AlertCircle className="w-3.5 h-3.5 shrink-0" />}
+                  <span>{sheetValidation.valid ? `${sheetValidation.title}: aba ${aba || 'Cliques'} pronta para receber os acessos.` : sheetValidation.error}</span>
                 </div>
               )}
             </div>
@@ -466,20 +583,6 @@ export const CreateLinkModal: React.FC<CreateLinkModalProps> = ({
 
             {/* 5. Parâmetros de Rastreamento (Campanha, Origem, Meio, Conteúdo) */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-xs font-semibold text-slate-200 mb-1">
-                  Campanha <span className="text-emerald-400">*</span>
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={campaign}
-                  onChange={(e) => setCampaign(e.target.value)}
-                  placeholder="Ex: Primavera_2026"
-                  className="w-full px-3 py-2 rounded-lg bg-slate-800/80 border border-slate-700 text-slate-100 placeholder-slate-500 text-xs focus:outline-none focus:border-emerald-500 transition"
-                />
-              </div>
-
               <div>
                 <label className="block text-xs font-semibold text-slate-200 mb-1">
                   Meio (Medium)
@@ -591,3 +694,4 @@ export const CreateLinkModal: React.FC<CreateLinkModalProps> = ({
     </div>
   );
 };
+

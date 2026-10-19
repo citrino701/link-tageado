@@ -2,6 +2,8 @@ import React from 'react';
 import { Link2, MousePointerClick, CheckCircle, Users, Bot, AlertTriangle, RefreshCw } from 'lucide-react';
 
 interface StatsOverviewProps {
+  metricsReady?: boolean;
+  queueReady?: boolean;
   totalLinks: number;
   realClicks: number;
   totalClicks: number;
@@ -12,6 +14,8 @@ interface StatsOverviewProps {
 }
 
 export const StatsOverview: React.FC<StatsOverviewProps> = ({
+  metricsReady = true,
+  queueReady = true,
   totalLinks,
   realClicks,
   totalClicks,
@@ -41,7 +45,7 @@ export const StatsOverview: React.FC<StatsOverviewProps> = ({
           <CheckCircle className="w-4 h-4" />
         </div>
         <div>
-          <span className="text-2xl font-bold text-emerald-400">{realClicks}</span>
+          <span className="text-2xl font-bold text-emerald-400">{metricsReady ? realClicks : '—'}</span>
           <p className="text-[11px] text-emerald-400/70 mt-0.5">exclui bots e robôs</p>
         </div>
       </div>
@@ -53,7 +57,7 @@ export const StatsOverview: React.FC<StatsOverviewProps> = ({
           <MousePointerClick className="w-4 h-4 text-indigo-400" />
         </div>
         <div>
-          <span className="text-2xl font-bold text-slate-100">{totalClicks}</span>
+          <span className="text-2xl font-bold text-slate-100">{metricsReady ? totalClicks : '—'}</span>
           <p className="text-[11px] text-slate-400 mt-0.5">todos os acessos</p>
         </div>
       </div>
@@ -65,7 +69,7 @@ export const StatsOverview: React.FC<StatsOverviewProps> = ({
           <Users className="w-4 h-4 text-cyan-400" />
         </div>
         <div>
-          <span className="text-2xl font-bold text-slate-100">{uniqueVisitors}</span>
+          <span className="text-2xl font-bold text-slate-100">{metricsReady ? uniqueVisitors : '—'}</span>
           <p className="text-[11px] text-slate-400 mt-0.5">visitantes únicos est.</p>
         </div>
       </div>
@@ -77,7 +81,7 @@ export const StatsOverview: React.FC<StatsOverviewProps> = ({
           <Bot className="w-4 h-4 text-amber-400" />
         </div>
         <div>
-          <span className="text-2xl font-bold text-slate-100">{suspectBots}</span>
+          <span className="text-2xl font-bold text-slate-100">{metricsReady ? suspectBots : '—'}</span>
           <p className="text-[11px] text-slate-400 mt-0.5">crawlers e robôs</p>
         </div>
       </div>
@@ -103,13 +107,14 @@ export const StatsOverview: React.FC<StatsOverviewProps> = ({
         </div>
         <div>
           <span className={`text-2xl font-bold ${syncFailuresCount > 0 ? 'text-rose-400' : 'text-slate-100'}`}>
-            {syncFailuresCount}
+            {queueReady ? syncFailuresCount : '—'}
           </span>
           <p className={`text-[11px] mt-0.5 ${syncFailuresCount > 0 ? 'text-rose-400 underline' : 'text-slate-400'}`}>
-            {syncFailuresCount > 0 ? 'clique para reenviar' : 'tudo sincronizado'}
+            {!queueReady ? 'aguardando atualização' : syncFailuresCount > 0 ? 'clique para reenviar' : 'tudo sincronizado'}
           </p>
         </div>
       </div>
     </div>
   );
 };
+

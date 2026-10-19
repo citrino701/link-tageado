@@ -164,9 +164,9 @@ function findLink_(linkId) {
 function appendClick_(config, params) {
   if (!config.spreadsheetId) throw new Error("ID da planilha de registro inválido.");
   const spreadsheet = SpreadsheetApp.openById(config.spreadsheetId);
-  const sheet = ensureClickSheet_(spreadsheet, config.aba || "Cliques");
-  const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0]
-    .map(function (value) { return String(value).trim(); });
+  const target = ensureClickSheet_(spreadsheet, config.aba || "Cliques");
+  const sheet = target.sheet;
+  const headers = target.headers;
   const userAgent = String(params.ua || "");
   const values = {
     data_hora: new Date(),
@@ -215,7 +215,7 @@ function ensureClickSheet_(spreadsheet, tabName) {
   if (sheet.getLastRow() === 0) {
     sheet.getRange(1, 1, 1, CLICK_HEADERS.length).setValues([CLICK_HEADERS]);
     sheet.setFrozenRows(1);
-    return sheet;
+    return { sheet: sheet, headers: CLICK_HEADERS.slice() };
   }
 
   const lastColumn = Math.max(sheet.getLastColumn(), 1);
@@ -231,12 +231,13 @@ function ensureClickSheet_(spreadsheet, tabName) {
 
   CLICK_HEADERS.forEach(function (header) {
     if (existing[header] === undefined) {
-      const nextColumn = sheet.getLastColumn() + 1;
+      const nextColumn = headers.length + 1;
       sheet.getRange(1, nextColumn).setValue(header);
       existing[header] = nextColumn - 1;
+      headers.push(header);
     }
   });
-  return sheet;
+  return { sheet: sheet, headers: headers };
 }
 
 function clickIdExists_(sheet, headers, clickId) {
@@ -405,3 +406,4 @@ function makeResponse_(result, callback) {
   }
   return ContentService.createTextOutput(json).setMimeType(ContentService.MimeType.JSON);
 }
+
