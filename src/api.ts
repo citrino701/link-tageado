@@ -3,7 +3,8 @@
  */
 export interface AdminStatus {
   adminEmail: string;
-  setupAt: string | null;
+  setupAt?: string | null;
+  connectedAt?: string | null;
 }
 
 export async function fetchAdminStatus(): Promise<AdminStatus> {
