@@ -225,13 +225,7 @@ function getAdminStatus_() {
 
   return {
     adminEmail: email,
-    isOAuthConfigured: true,
-    hasClientSecret: false,
-    isConnected: true,
-    hasRefreshToken: false,
-    connectedEmail: email,
-    connectedAt: PropertiesService.getScriptProperties().getProperty("ADMIN_SETUP_AT"),
-    currentUserEmail: email,
+    setupAt: PropertiesService.getScriptProperties().getProperty("ADMIN_SETUP_AT"),
     totalLinks: links.length,
     totalClicks: totalClicks,
     realClicks: realClicks,
