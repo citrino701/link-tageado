@@ -193,19 +193,17 @@ function appendClick_(config, params) {
     return values[header] === undefined ? "" : values[header];
   });
 
-  if (params.__retry) {
-    const lock = LockService.getScriptLock();
-    lock.waitLock(10000);
-    try {
-      if (clickIdExists_(sheet, headers, params.click_id)) return;
-      sheet.appendRow(row);
-    } finally {
-      lock.releaseLock();
-    }
-    return;
+  // The Cloudflare fast redirect and its compatibility fallback can overlap
+  // if a browser loses the first response. Use the same idempotency check for
+  // normal writes and retries so one click_id is recorded only once.
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    if (clickIdExists_(sheet, headers, params.click_id)) return;
+    sheet.appendRow(row);
+  } finally {
+    lock.releaseLock();
   }
-
-  sheet.appendRow(row);
 }
 
 function ensureClickSheet_(spreadsheet, tabName) {
