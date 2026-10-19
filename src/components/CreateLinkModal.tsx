@@ -251,7 +251,7 @@ export const CreateLinkModal: React.FC<CreateLinkModalProps> = ({
             <div>
               <h4 className="text-xl font-bold text-slate-100">Link Rastreável Gerado com Sucesso!</h4>
               <p className="text-sm text-slate-400 mt-1">
-                A configuração foi salva no Firestore e a linha foi registrada na aba <strong>Links</strong> da sua planilha.
+                A configuração foi salva na aba <strong>Links</strong> da planilha central.
               </p>
             </div>
 
@@ -262,7 +262,7 @@ export const CreateLinkModal: React.FC<CreateLinkModalProps> = ({
               </span>
               <div className="flex items-center justify-between gap-2 bg-slate-900/80 border border-slate-700/60 rounded-lg px-3 py-2">
                 <span className="font-mono text-emerald-400 font-semibold text-sm truncate">
-                  {window.location.origin}{createdLink.shortPath}
+                  {buildPublicLink(createdLink)}
                 </span>
                 <button
                   onClick={() => handleCopy(createdLink)}
