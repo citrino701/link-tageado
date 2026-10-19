@@ -7,7 +7,8 @@ const TRACKED_PARAMS = [
 function cookieValue(request, name) {
   const cookies = request.headers.get("cookie") || "";
   const match = cookies.match(new RegExp("(?:^|;\\s*)" + name + "=([^;]*)"));
-  return match ? decodeURIComponent(match[1]) : "";
+  if (!match) return "";
+  try { return decodeURIComponent(match[1]); } catch (_) { return ""; }
 }
 
 function buildTrackingUrl(scriptUrl, request, linkId, visitorId, clickId) {
