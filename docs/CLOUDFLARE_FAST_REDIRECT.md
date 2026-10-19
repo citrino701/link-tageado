@@ -7,7 +7,7 @@ Se o KV ou a configuração ainda não estiverem prontos, a página ponte atual 
 ## Preparar o Cloudflare Pages
 
 1. No projeto Pages `linkshorter`, crie um namespace KV chamado `LINKS`.
-2. Em **Settings → Functions → KV namespace bindings**, adicione o binding com variável `LINKS` apontando para esse namespace.
+2. Em **Settings → Bindings → Add → KV namespace**, adicione o binding com variável `LINKS` apontando para esse namespace.
 3. Em **Settings → Variables and Secrets**, configure:
    - `APPS_SCRIPT_URL`: URL `/exec` da implantação pública de rastreamento.
    - `SYNC_TOKEN`: um token longo e aleatório. Cadastre o mesmo valor como propriedade do Apps Script administrativo.
@@ -32,4 +32,4 @@ Depois de atualizar e publicar uma nova versão do `Code.gs`, rode uma vez `sync
 3. Confira se o clique apareceu uma única vez na planilha da campanha.
 4. Crie um link de teste no painel, abra-o e confirme o destino e o registro na planilha.
 
-No plano gratuito, Workers permite até 100 mil requisições por dia (compartilhadas com outros Workers/Functions da conta) e o KV inclui 100 mil leituras e 1.000 gravações por dia. Cada clique sincronizado consome uma requisição Worker e uma leitura KV; cadastrar, alterar status ou excluir link consome uma gravação KV. Isso não é um teto mensal de 500 cliques. As cotas e a capacidade do Apps Script/Sheets continuam independentes.
+No plano gratuito, Workers permite até 100 mil requisições por dia, compartilhadas com outros Workers e Pages Functions da conta; KV inclui 100 mil leituras e 1.000 gravações por dia. Cada clique sincronizado consome uma requisição Worker e uma leitura KV; cadastrar, alterar status ou excluir link consome uma gravação KV. Isso não é um teto mensal de 500 cliques. As cotas e a capacidade do Apps Script/Sheets continuam independentes.
