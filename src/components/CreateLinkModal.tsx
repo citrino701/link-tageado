@@ -16,7 +16,7 @@ import {
 import { extractSpreadsheetId, buildWhatsAppUrl, validateDestinationUrl } from '../utils/sheets-helpers.ts';
 import { LinkRecord } from '../services/store.ts';
 import { campaignCatalog, campaignsForSheet, resolveCampaign, type CampaignTarget } from '../utils/campaigns.ts';
-import { buildPublicLink } from '../utils/public-link.ts';
+import { buildPublicLink, displayPublicLink } from '../utils/public-link.ts';
 
 interface CreateLinkModalProps {
   isOpen: boolean;
@@ -334,8 +334,8 @@ export const CreateLinkModal: React.FC<CreateLinkModalProps> = ({
                 Endereço Curto Rastreável:
               </span>
               <div className="flex items-center justify-between gap-2 bg-slate-900/80 border border-slate-700/60 rounded-lg px-3 py-2">
-                <span className="font-mono text-emerald-400 font-semibold text-sm truncate">
-                  {buildPublicLink(createdLink)}
+                <span title={buildPublicLink(createdLink)} className="font-mono text-emerald-400 font-semibold text-sm truncate">
+                  {displayPublicLink(createdLink)}
                 </span>
                 <button
                   onClick={() => handleCopy(createdLink)}

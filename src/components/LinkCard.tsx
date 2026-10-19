@@ -14,7 +14,7 @@ import {
   MousePointerClick,
 } from 'lucide-react';
 import { LinkRecord } from '../services/store.ts';
-import { buildPublicLink } from '../utils/public-link.ts';
+import { buildPublicLink, displayPublicLink } from '../utils/public-link.ts';
 
 interface LinkCardProps {
   metricsReady?: boolean;
@@ -109,8 +109,8 @@ export const LinkCard: React.FC<LinkCardProps> = ({ link, onToggleStatus, onDele
         <div className="mt-4 bg-slate-950/70 border border-slate-800 rounded-xl p-2.5 flex items-center justify-between gap-2">
           <div className="flex items-center gap-2 overflow-hidden">
             <Link2 className="w-4 h-4 text-emerald-400 shrink-0" />
-            <span className="font-mono text-xs font-semibold text-emerald-400 truncate">
-              {fullShortUrl}
+            <span title={fullShortUrl} className="font-mono text-xs font-semibold text-emerald-400 truncate">
+              {displayPublicLink(link)}
             </span>
           </div>
           <button

@@ -49,6 +49,7 @@ jobs:
       - name: Test campaign associations and tracking
         run: |
           node --import tsx --test src/utils/campaigns.test.ts
+          node --import tsx --test src/utils/public-link.test.ts
           node --test apps-script/public/tracker.test.mjs
 
       - name: Build React assets for Apps Script

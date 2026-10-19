@@ -72,6 +72,11 @@ Não existe um teto artificial de 500 cliques/mês no código. Cada clique é um
 
 ## Atualização: campanhas e carregamento do painel
 
+Os novos links compartilhados contêm apenas `?id=...`. O rastreador busca campanha,
+origem, meio e conteúdo na planilha central, sem repetir esses textos na URL.
+Links antigos com parâmetros `utm_*` continuam aceitos. O painel mostra o endereço
+sem `https://`, e o botão **Copiar** mantém a URL completa para compartilhamento.
+
 O formulário oferece **Campanha existente** e **Nova campanha**. Selecionar uma
 campanha preenche sua planilha; colar uma planilha cadastrada reconhece o nome da
 campanha. O cadastro preserva a aba já usada pelos links anteriores. Quando há

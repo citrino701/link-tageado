@@ -61,3 +61,39 @@ test('redirect response is returned after click registration, and failure still 
   assert.equal(f.context.doGet(event).destination, 'https://example.com');
   assert.deepEqual(calls, ['queue', 'response']);
 });
+
+function bridgeParams(search) {
+  const html = fs.readFileSync(new URL('../../docs/index.html', import.meta.url), 'utf8');
+  const script = html.match(/<script>([\s\S]*?)<\/script>/)[1];
+  let requestUrl;
+  const crypto = { randomUUID: () => 'test-id' };
+  vm.runInNewContext(script, {
+    URL, URLSearchParams, crypto,
+    window: { location: { search }, crypto, setTimeout() {} },
+    localStorage: { getItem: () => 'visitor1' },
+    navigator: { userAgent: 'browser', language: 'pt-BR' },
+    document: { referrer: '', createElement: () => ({}), head: { appendChild: el => { requestUrl = el.src; } } },
+  });
+  return Object.fromEntries(new URL(requestUrl).searchParams);
+}
+
+test('compact bridge URL preserves registry origin and every stored tag in the click row', () => {
+  const f = fixture();
+  const params = bridgeParams('?id=test');
+  assert.equal(params.origem, undefined);
+  f.context.appendClick_({ id: 'test', spreadsheetId: 'sheet', nome: 'Story', campanha: 'Primavera', source: 'Instagram_Stories', medium: 'Social', content: 'Video_01' }, params);
+  const row = f.rows[0];
+  assert.equal(row[5], 'Instagram_Stories');
+  assert.equal(row[6], 'Instagram_Stories');
+  assert.equal(row[7], 'Social');
+  assert.equal(row[8], 'Primavera');
+  assert.equal(row[9], 'Video_01');
+});
+
+test('older shared URLs can still override the stored tags', () => {
+  const f = fixture();
+  const params = bridgeParams('?id=test&utm_source=QR_Code&utm_medium=impresso&utm_campaign=Evento&utm_content=Cartaz&utm_term=teste');
+  f.context.appendClick_({ id: 'test', spreadsheetId: 'sheet', campanha: 'Primavera', source: 'Instagram', medium: 'Social', content: 'Video' }, params);
+  assert.deepEqual(f.rows[0].slice(5, 11), ['QR_Code', 'QR_Code', 'impresso', 'Evento', 'Cartaz', 'teste']);
+  assert.equal(bridgeParams('?id=test&origem=Manual&utm_source=QR_Code').origem, 'Manual');
+});

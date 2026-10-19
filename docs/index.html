@@ -72,7 +72,11 @@
       } else {
         const query = new URLSearchParams(window.location.search);
         query.set("id", linkId);
-        query.set("origem", query.get("origem") || "Direto");
+        // Compact links resolve their origin/tags from the registry. Preserve
+        // explicit campaign parameters in older links without forcing "Direto".
+        if (!query.get("origem") && query.get("utm_source")) {
+          query.set("origem", query.get("utm_source"));
+        }
         query.set("ref", (document.referrer || "").slice(0, 500));
         query.set("ua", (navigator.userAgent || "").slice(0, 400));
         query.set("lang", (navigator.language || "").slice(0, 80));
