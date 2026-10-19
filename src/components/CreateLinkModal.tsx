@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { extractSpreadsheetId, buildWhatsAppUrl, validateDestinationUrl } from '../utils/sheets-helpers.ts';
 import { LinkRecord } from '../services/store.ts';
+import { buildPublicLink } from '../utils/public-link.ts';
 
 interface CreateLinkModalProps {
   isOpen: boolean;
@@ -187,8 +188,8 @@ export const CreateLinkModal: React.FC<CreateLinkModalProps> = ({
     }
   };
 
-  const handleCopy = (path: string) => {
-    const fullUrl = `${window.location.origin}${path}`;
+  const handleCopy = (link: LinkRecord) => {
+    const fullUrl = buildPublicLink(link);
     navigator.clipboard.writeText(fullUrl);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
@@ -250,7 +251,7 @@ export const CreateLinkModal: React.FC<CreateLinkModalProps> = ({
             <div>
               <h4 className="text-xl font-bold text-slate-100">Link Rastreável Gerado com Sucesso!</h4>
               <p className="text-sm text-slate-400 mt-1">
-                A configuração foi salva no Firestore e a linha foi registrada na aba <strong>Links</strong> da sua planilha.
+                A configuração foi salva na aba <strong>Links</strong> da planilha central.
               </p>
             </div>
 
@@ -261,10 +262,10 @@ export const CreateLinkModal: React.FC<CreateLinkModalProps> = ({
               </span>
               <div className="flex items-center justify-between gap-2 bg-slate-900/80 border border-slate-700/60 rounded-lg px-3 py-2">
                 <span className="font-mono text-emerald-400 font-semibold text-sm truncate">
-                  {window.location.origin}{createdLink.shortPath}
+                  {buildPublicLink(createdLink)}
                 </span>
                 <button
-                  onClick={() => handleCopy(createdLink.shortPath)}
+                  onClick={() => handleCopy(createdLink)}
                   className="flex items-center gap-1 px-3 py-1.5 rounded-md bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-medium transition shrink-0"
                 >
                   <Copy className="w-3.5 h-3.5" />
@@ -276,7 +277,7 @@ export const CreateLinkModal: React.FC<CreateLinkModalProps> = ({
             {/* Action Buttons as requested */}
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 pt-2">
               <a
-                href={createdLink.shortPath}
+                href={buildPublicLink(createdLink)}
                 target="_blank"
                 rel="noreferrer"
                 className="flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-700 transition"

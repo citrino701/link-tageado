@@ -14,6 +14,7 @@ import {
   MousePointerClick,
 } from 'lucide-react';
 import { LinkRecord } from '../services/store.ts';
+import { buildPublicLink } from '../utils/public-link.ts';
 
 interface LinkCardProps {
   link: LinkRecord;
@@ -25,7 +26,7 @@ export const LinkCard: React.FC<LinkCardProps> = ({ link, onToggleStatus, onDele
   const [copied, setCopied] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
-  const fullShortUrl = `${window.location.origin}${link.shortPath}`;
+  const fullShortUrl = buildPublicLink(link);
 
   const handleCopy = () => {
     navigator.clipboard.writeText(fullShortUrl);
@@ -172,7 +173,7 @@ export const LinkCard: React.FC<LinkCardProps> = ({ link, onToggleStatus, onDele
         <div className="flex items-center gap-1.5">
           {/* Test Link button */}
           <a
-            href={link.shortPath}
+            href={fullShortUrl}
             target="_blank"
             rel="noreferrer"
             className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-700 transition"
