@@ -114,18 +114,9 @@
           document.head.appendChild(script);
         }
 
-        const fastEndpoint = new URL("/api/click", window.location.origin);
-        fastEndpoint.search = query.toString();
-        fetch(fastEndpoint.toString(), { method: "GET", cache: "no-store" })
-          .then(function (response) {
-            if (!response.ok) throw new Error("Fast redirect unavailable");
-            return response.json();
-          })
-          .then(function (result) {
-            if (!result || result.ok !== true) throw new Error("Fast redirect unavailable");
-            openDestination(result);
-          })
-          .catch(useLegacyScript);
+        // Synced links are redirected directly by the Cloudflare middleware.
+        // This page remains the compatibility path for old or unsynced links.
+        useLegacyScript();
 
         window.setTimeout(function () {
           const title = document.getElementById("title");
