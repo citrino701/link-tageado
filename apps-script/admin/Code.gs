@@ -2,6 +2,8 @@ const ADMIN_DEFAULT_EMAIL = "hugoviajante@gmail.com";
 const REGISTRY_PROPERTY = "TRACKER_REGISTRY_ID";
 const ADMIN_EMAIL_PROPERTY = "ADMIN_EMAIL";
 const PUBLIC_LINK_BASE_PROPERTY = "PUBLIC_LINK_BASE_URL";
+const CLOUDFLARE_MANAGE_URL_PROPERTY = "CLOUDFLARE_MANAGE_URL";
+const CLOUDFLARE_SYNC_TOKEN_PROPERTY = "CLOUDFLARE_SYNC_TOKEN";
 const PUBLIC_ASSET_BASE = "https://citrino701.github.io/link-tageado/app";
 
 const REGISTRY_HEADERS = [
@@ -497,7 +499,63 @@ function createLink_(input) {
     updatedAt: now
   };
   linksSheet.appendRow(headersToRow_(headerMap, values));
+  try {
+    link.cloudflareSynced = syncCloudflareLinks_([{
+      id: link.id,
+      destinationUrl: link.destinationUrl,
+      active: true
+    }]);
+  } catch (syncError) {
+    link.cloudflareSynced = false;
+    console.error("Cloudflare link sync failed:", syncError && syncError.message || syncError);
+  }
   return link;
+}
+
+function syncAllLinksToCloudflare() {
+  const props = PropertiesService.getScriptProperties();
+  if (!props.getProperty(CLOUDFLARE_SYNC_TOKEN_PROPERTY)) {
+    throw new Error("Configure CLOUDFLARE_SYNC_TOKEN antes de sincronizar.");
+  }
+  const links = getAllLinks_(false);
+  let synchronized = 0;
+  for (let i = 0; i < links.length; i += 500) {
+    const batch = links.slice(i, i + 500).map(function (link) {
+      return {
+        id: link.id,
+        destinationUrl: link.destinationUrl,
+        active: link.status === "active"
+      };
+    });
+    if (batch.length) {
+      syncCloudflareLinks_(batch);
+      synchronized += batch.length;
+    }
+  }
+  return { success: true, synchronized: synchronized };
+}
+
+function syncCloudflareLinks_(links) {
+  if (!links || !links.length) return true;
+  const props = PropertiesService.getScriptProperties();
+  const token = String(props.getProperty(CLOUDFLARE_SYNC_TOKEN_PROPERTY) || "").trim();
+  if (!token) return false;
+  const url = String(props.getProperty(CLOUDFLARE_MANAGE_URL_PROPERTY) ||
+    "https://linkshorter.pages.dev/api/manage-links").trim();
+  const response = UrlFetchApp.fetch(url, {
+    method: "post",
+    contentType: "application/json",
+    headers: { Authorization: "Bearer " + token },
+    payload: JSON.stringify({ links: links }),
+    muteHttpExceptions: true
+  });
+  const status = response.getResponseCode();
+  let result = {};
+  try { result = JSON.parse(response.getContentText() || "{}"); } catch (ignored) {}
+  if (status < 200 || status >= 300 || result.ok !== true) {
+    throw new Error(result.error || "Cloudflare recusou a sincronização (HTTP " + status + ").");
+  }
+  return true;
 }
 
 function updateLinkStatus_(id, status) {
@@ -514,6 +572,18 @@ function updateLinkStatus_(id, status) {
     sheet.getRange(i + 1, statusColumn + 1).setValue(status === "active");
     if (updatedColumn !== undefined) sheet.getRange(i + 1, updatedColumn + 1).setValue(new Date().toISOString());
     const link = getAllLinks_(false).find(function (item) { return item.id === id; });
+    if (link) {
+      try {
+        link.cloudflareSynced = syncCloudflareLinks_([{
+          id: link.id,
+          destinationUrl: link.destinationUrl,
+          active: link.status === "active"
+        }]);
+      } catch (syncError) {
+        link.cloudflareSynced = false;
+        console.error("Cloudflare status sync failed:", syncError && syncError.message || syncError);
+      }
+    }
     return link || null;
   }
   return null;
@@ -526,6 +596,12 @@ function deleteLink_(id) {
   const headers = headerMap_(values[0]);
   for (let i = values.length - 1; i > 0; i--) {
     if (String(values[i][headers.id]).trim() === id) {
+      try {
+        syncCloudflareLinks_([{ id: id, removed: true }]);
+      } catch (syncError) {
+        throw new Error("Não removi o link: falhou a sincronização com o Cloudflare. " +
+          (syncError.message || String(syncError)));
+      }
       sheet.deleteRow(i + 1);
       return true;
     }
