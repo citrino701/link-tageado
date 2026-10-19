@@ -49,6 +49,10 @@ jobs:
       - name: Build React assets for Apps Script
         run: npm run build:gas-ui
 
+      - name: Verify browser bundle
+        run: |
+          node -e "const fs = require('node:fs'); const bundle = fs.readFileSync('docs/app/hub-app.js', 'utf8'); if (bundle.includes('process.env.NODE_ENV')) { console.error('React bundle still contains an unresolved Node environment reference.'); process.exit(1); }"
+
       - name: Upload GitHub Pages artifact
         if: github.event_name == 'push'
         uses: actions/upload-pages-artifact@v3
