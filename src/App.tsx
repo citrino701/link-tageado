@@ -59,7 +59,7 @@ export default function App() {
       // 1. Status via backend API
       const statusData = await fetchAdminStatus();
       setAdminEmail(statusData.adminEmail || 'hugoviajante@gmail.com');
-      setSetupAt(statusData.setupAt);
+      setSetupAt(statusData.setupAt || statusData.connectedAt || null);
 
       // 2. Links
       const linksRes = await fetch('/api/admin/links');
