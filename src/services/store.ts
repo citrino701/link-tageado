@@ -178,6 +178,7 @@ async function getDocs(reference: FirestoreCollectionReference) {
 }
 
 export interface LinkRecord {
+  aba?: string;
   id: string;
   name: string;
   spreadsheetId: string;
@@ -716,4 +717,5 @@ class AppStore {
 }
 
 export const store = new AppStore();
+
 

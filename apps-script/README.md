@@ -69,3 +69,39 @@ Os visitantes não precisam fazer login. Somente a implantação administrativa 
 O Apps Script usa a permissão da conta que abriu o painel. Não há Client ID, Client Secret, refresh token externo ou branding OAuth do Cloud Console. Os cliques são gravados diretamente na planilha de destino; falhas ficam registradas em `Falhas` e podem ser reprocessadas pelo painel quando o evento contém os dados necessários.
 
 Não existe um teto artificial de 500 cliques/mês no código. Cada clique é uma execução separada; o limite de 6 minutos é o tempo máximo de uma execução, não um intervalo entre cliques. Aplicam-se as cotas diárias e de concorrência do Apps Script, sujeitas a mudanças.
+
+## Atualização: campanhas e carregamento do painel
+
+Os novos links compartilhados contêm apenas `?id=...`. O rastreador busca campanha,
+origem, meio e conteúdo na planilha central, sem repetir esses textos na URL.
+Links antigos com parâmetros `utm_*` continuam aceitos. O painel mostra o endereço
+sem `https://`, e o botão **Copiar** mantém a URL completa para compartilhamento.
+
+O formulário oferece **Campanha existente** e **Nova campanha**. Selecionar uma
+campanha preenche sua planilha; colar uma planilha cadastrada reconhece o nome da
+campanha. O cadastro preserva a aba já usada pelos links anteriores. Quando há
+mais de uma associação antiga, o painel pede a escolha da campanha, planilha ou
+aba. Uma nova campanha é salva junto com seu primeiro link.
+
+O painel carrega o cadastro antes de consultar o histórico de cliques. Os números
+aparecem depois, sem bloquear a seleção de campanhas. Não há alteração de preço
+ou inclusão de serviços pagos; continuam valendo as cotas do Apps Script.
+
+Depois de mesclar o PR e concluir o workflow do GitHub:
+
+1. No projeto **administrativo** do Apps Script, substitua `Code.gs` pelo conteúdo
+   de `apps-script/admin/Code.gs` deste repositório e salve.
+2. Em **Implantar → Gerenciar implantações → Editar (lápis)**, selecione
+   **Nova versão → Implantar**. Mantenha a implantação privada e o mesmo URL `/exec`.
+3. Reabra o painel. Não é necessário alterar `Admin.html` ou executar o setup novamente.
+4. Para aplicar também a redução de leituras no rastreador, atualize `Code.gs` do
+   projeto **público** com `apps-script/public/Code.gs` e publique uma nova versão da
+   implantação existente. Mantenha o mesmo URL, execução como proprietário e acesso
+   público. Não substitua o código de um projeto pelo arquivo do outro.
+
+A interface continua compatível com a API administrativa anterior durante a
+atualização, mas o carregamento rápido e a validação no servidor exigem a nova
+versão do script administrativo. A abertura do link público continua aguardando
+o registro do clique; a latência real depende do Apps Script e deve ser medida
+após a publicação. Não há promessa de redirecionamento instantâneo.
+

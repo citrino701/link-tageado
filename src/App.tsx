@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Plus,
   Search,
@@ -11,7 +11,7 @@ import {
   Tag,
 } from 'lucide-react';
 
-import { fetchAdminStatus } from './api.ts';
+import { fetchCatalog, readAdmin } from './api.ts';
 import { Navbar } from './components/Navbar.tsx';
 import { ConnectSheetsCard } from './components/ConnectSheetsCard.tsx';
 import { StatsOverview } from './components/StatsOverview.tsx';
@@ -29,6 +29,11 @@ export default function App() {
   const [links, setLinks] = useState<LinkRecord[]>([]);
   const [syncQueue, setSyncQueue] = useState<SyncQueueItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isCatalogLoading, setIsCatalogLoading] = useState(true);
+  const [catalogError, setCatalogError] = useState('');
+  const [metricsReady, setMetricsReady] = useState(false);
+  const [queueReady, setQueueReady] = useState(false);
+  const loadVersion = useRef(0);
 
   // Filters & Search
   const [searchTerm, setSearchTerm] = useState('');
@@ -52,37 +57,59 @@ export default function App() {
     setTimeout(() => setToast(null), 4000);
   };
 
-  // Fetch initial app state
+  // Campaigns use only the registry; click history loads after the catalog is visible.
   const loadData = async () => {
+    const version = ++loadVersion.current;
     setIsLoading(true);
+    setIsCatalogLoading(true);
+    setCatalogError('');
     try {
-      // 1. Status via backend API
-      const statusData = await fetchAdminStatus();
-      setAdminEmail(statusData.adminEmail || 'hugoviajante@gmail.com');
-      setSetupAt(statusData.setupAt || statusData.connectedAt || null);
+      const data = await fetchCatalog();
+      if (version !== loadVersion.current) return;
+      setAdminEmail(data.adminEmail || 'hugoviajante@gmail.com');
+      setSetupAt(data.setupAt || data.connectedAt || null);
+      setLinks(data.links || []);
+      setMetricsReady(data.metricsIncluded);
+      setIsCatalogLoading(false);
 
-      // 2. Links
-      const linksRes = await fetch('/api/admin/links');
-      if (linksRes.ok) {
-        const linksData = await linksRes.json();
-        setLinks(linksData.links || []);
-      }
-
-      // 3. Queue
-      const queueRes = await fetch('/api/admin/queue');
-      if (queueRes.ok) {
-        const queueData = await queueRes.json();
-        setSyncQueue(queueData.queue || []);
+      const results = await Promise.allSettled([
+        data.metricsIncluded ? Promise.resolve() : readAdmin<{ links: LinkRecord[] }>('/api/admin/links').then(result => {
+          if (version !== loadVersion.current) return;
+          const byId = new Map(result.links.map(link => [link.id, link]));
+          // Only update counters: a delayed response must not undo a create/delete/status change.
+          setLinks(current => current.map(link => {
+            const metric = byId.get(link.id);
+            return metric ? { ...link,
+              totalClicksCount: metric.totalClicksCount,
+              realClicksCount: metric.realClicksCount,
+              uniqueVisitorsCount: metric.uniqueVisitorsCount,
+              suspectBotsCount: metric.suspectBotsCount,
+            } : link;
+          }));
+          setMetricsReady(true);
+        }),
+        readAdmin<{ queue: SyncQueueItem[] }>('/api/admin/queue').then(result => {
+          if (version !== loadVersion.current) return;
+          setSyncQueue(result.queue || []);
+          setQueueReady(true);
+        }),
+      ]);
+      if (version === loadVersion.current && results.some(r => r.status === 'rejected')) {
+        showToast('As campanhas carregaram, mas algumas métricas não atualizaram. Tente Atualizar.', 'error');
       }
     } catch (err: any) {
-      console.warn('Error fetching admin data:', err.message);
+      if (version === loadVersion.current) setCatalogError(err.message || 'Não foi possível carregar as campanhas.');
     } finally {
-      setIsLoading(false);
+      if (version === loadVersion.current) {
+        setIsLoading(false);
+        setIsCatalogLoading(false);
+      }
     }
   };
 
   useEffect(() => {
-    loadData();
+    void loadData();
+    return () => { loadVersion.current++; };
   }, []);
 
   // Toggle link status
@@ -176,7 +203,7 @@ export default function App() {
     if (!acc[camp]) acc[camp] = [];
     acc[camp].push(link);
     return acc;
-  }, {});
+  }, Object.create(null));
   const campaignNames = Object.keys(campaignGroups).sort();
 
   return (
@@ -221,7 +248,8 @@ export default function App() {
               Métricas Consolidadas
             </h3>
             <button
-              onClick={loadData}
+              onClick={() => void loadData()}
+              disabled={isLoading}
               className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-slate-200 transition"
               title="Atualizar métricas"
             >
@@ -231,6 +259,8 @@ export default function App() {
           </div>
 
           <StatsOverview
+            metricsReady={metricsReady}
+            queueReady={queueReady}
             totalLinks={totalLinks}
             realClicks={realClicks}
             totalClicks={totalClicks}
@@ -253,6 +283,7 @@ export default function App() {
 
             <button
               onClick={() => setIsCreateModalOpen(true)}
+              disabled={isCatalogLoading || !!catalogError}
               className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400 text-white font-semibold text-xs shadow-lg shadow-emerald-500/20 transition shrink-0"
             >
               <Plus className="w-4 h-4" />
@@ -371,7 +402,12 @@ export default function App() {
           </div>
 
           {/* Links Rendering */}
-          {filteredLinks.length === 0 ? (
+          {isCatalogLoading ? <p role="status" className="text-sm text-slate-400 py-8">Carregando campanhas e links...</p> : catalogError ? (
+            <div role="alert" className="rounded-xl border border-rose-500/40 p-4 text-sm text-rose-300">
+              <p>{catalogError}</p>
+              <button onClick={() => void loadData()} className="mt-2 underline">Tentar novamente</button>
+            </div>
+          ) : filteredLinks.length === 0 ? (
             <div className="bg-slate-900 border border-slate-800 rounded-2xl p-12 text-center space-y-4">
               <div className="w-14 h-14 rounded-2xl bg-slate-800 border border-slate-700 flex items-center justify-center text-slate-400 mx-auto">
                 <Link2 className="w-7 h-7" />
@@ -386,6 +422,7 @@ export default function App() {
               </div>
               <button
                 onClick={() => setIsCreateModalOpen(true)}
+                disabled={isCatalogLoading || !!catalogError}
                 className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs shadow-md shadow-emerald-600/20 transition"
               >
                 <Plus className="w-4 h-4" />
@@ -425,13 +462,13 @@ export default function App() {
                       {/* Métricas da Campanha */}
                       <div className="flex flex-wrap items-center gap-2 text-xs">
                         <span className="px-2.5 py-1 rounded-lg bg-slate-950/70 border border-slate-800 text-slate-300 text-[11px]">
-                          Cliques Reais: <strong className="text-emerald-400 font-semibold">{groupRealClicks}</strong>
+                          Cliques Reais: <strong className="text-emerald-400 font-semibold">{metricsReady ? groupRealClicks : '—'}</strong>
                         </span>
                         <span className="px-2.5 py-1 rounded-lg bg-slate-950/70 border border-slate-800 text-slate-300 text-[11px]">
-                          Total: <strong className="text-slate-100 font-semibold">{groupTotalClicks}</strong>
+                          Total: <strong className="text-slate-100 font-semibold">{metricsReady ? groupTotalClicks : '—'}</strong>
                         </span>
                         <span className="px-2.5 py-1 rounded-lg bg-slate-950/70 border border-slate-800 text-slate-300 text-[11px]">
-                          Visitantes Únicos: <strong className="text-teal-400 font-semibold">{groupUniqueVisitors}</strong>
+                          Visitantes Únicos: <strong className="text-teal-400 font-semibold">{metricsReady ? groupUniqueVisitors : '—'}</strong>
                         </span>
                       </div>
                     </div>
@@ -440,6 +477,7 @@ export default function App() {
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                       {groupLinks.map((link) => (
                         <LinkCard
+                          metricsReady={metricsReady}
                           key={link.id}
                           link={link}
                           onToggleStatus={handleToggleStatus}
@@ -456,6 +494,7 @@ export default function App() {
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {filteredLinks.map((link) => (
                 <LinkCard
+                  metricsReady={metricsReady}
                   key={link.id}
                   link={link}
                   onToggleStatus={handleToggleStatus}
@@ -470,6 +509,7 @@ export default function App() {
 
       {/* Modals */}
       <CreateLinkModal
+        links={links}
         isOpen={isCreateModalOpen}
         onClose={() => setIsCreateModalOpen(false)}
         onLinkCreated={(newLink) => {
@@ -499,3 +539,4 @@ export default function App() {
     </div>
   );
 }
+

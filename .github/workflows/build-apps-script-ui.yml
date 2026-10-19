@@ -46,6 +46,12 @@ jobs:
           node --check --input-type=commonjs < apps-script/admin/Code.gs
           node -e "JSON.parse(require('node:fs').readFileSync('apps-script/admin/appsscript.json', 'utf8'))"
 
+      - name: Test campaign associations and tracking
+        run: |
+          node --import tsx --test src/utils/campaigns.test.ts
+          node --import tsx --test src/utils/public-link.test.ts
+          node --test apps-script/public/tracker.test.mjs
+
       - name: Build React assets for Apps Script
         run: npm run build:gas-ui
 
@@ -74,3 +80,4 @@ jobs:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
+

@@ -5,6 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="referrer" content="strict-origin-when-cross-origin">
   <title>Abrindo link…</title>
+  <link rel="preconnect" href="https://script.google.com">
+  <link rel="preconnect" href="https://script.googleusercontent.com">
   <style>
     :root { color-scheme: light; font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
     body { min-height: 100vh; margin: 0; display: grid; place-items: center; background: #f6f7fb; color: #172033; }
@@ -70,7 +72,11 @@
       } else {
         const query = new URLSearchParams(window.location.search);
         query.set("id", linkId);
-        query.set("origem", query.get("origem") || "Direto");
+        // Compact links resolve their origin/tags from the registry. Preserve
+        // explicit campaign parameters in older links without forcing "Direto".
+        if (!query.get("origem") && query.get("utm_source")) {
+          query.set("origem", query.get("utm_source"));
+        }
         query.set("ref", (document.referrer || "").slice(0, 500));
         query.set("ua", (navigator.userAgent || "").slice(0, 400));
         query.set("lang", (navigator.language || "").slice(0, 80));
@@ -108,3 +114,4 @@
   </script>
 </body>
 </html>
+

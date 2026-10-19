@@ -14,15 +14,16 @@ import {
   MousePointerClick,
 } from 'lucide-react';
 import { LinkRecord } from '../services/store.ts';
-import { buildPublicLink } from '../utils/public-link.ts';
+import { buildPublicLink, displayPublicLink } from '../utils/public-link.ts';
 
 interface LinkCardProps {
+  metricsReady?: boolean;
   link: LinkRecord;
   onToggleStatus: (id: string, newStatus: 'active' | 'inactive') => void;
   onDelete: (id: string) => void;
 }
 
-export const LinkCard: React.FC<LinkCardProps> = ({ link, onToggleStatus, onDelete }) => {
+export const LinkCard: React.FC<LinkCardProps> = ({ link, onToggleStatus, onDelete, metricsReady = true }) => {
   const [copied, setCopied] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
@@ -108,8 +109,8 @@ export const LinkCard: React.FC<LinkCardProps> = ({ link, onToggleStatus, onDele
         <div className="mt-4 bg-slate-950/70 border border-slate-800 rounded-xl p-2.5 flex items-center justify-between gap-2">
           <div className="flex items-center gap-2 overflow-hidden">
             <Link2 className="w-4 h-4 text-emerald-400 shrink-0" />
-            <span className="font-mono text-xs font-semibold text-emerald-400 truncate">
-              {fullShortUrl}
+            <span title={fullShortUrl} className="font-mono text-xs font-semibold text-emerald-400 truncate">
+              {displayPublicLink(link)}
             </span>
           </div>
           <button
@@ -151,19 +152,19 @@ export const LinkCard: React.FC<LinkCardProps> = ({ link, onToggleStatus, onDele
         <div className="grid grid-cols-4 gap-2 mt-4 pt-3 border-t border-slate-800/80 text-center">
           <div className="bg-slate-950/40 p-2 rounded-lg">
             <span className="text-[10px] text-slate-400 block">Cliques Reais</span>
-            <span className="text-sm font-bold text-emerald-400">{link.realClicksCount || 0}</span>
+            <span className="text-sm font-bold text-emerald-400">{metricsReady ? link.realClicksCount || 0 : '—'}</span>
           </div>
           <div className="bg-slate-950/40 p-2 rounded-lg">
             <span className="text-[10px] text-slate-400 block">Totais</span>
-            <span className="text-sm font-bold text-slate-200">{link.totalClicksCount || 0}</span>
+            <span className="text-sm font-bold text-slate-200">{metricsReady ? link.totalClicksCount || 0 : '—'}</span>
           </div>
           <div className="bg-slate-950/40 p-2 rounded-lg">
             <span className="text-[10px] text-slate-400 block">Únicos</span>
-            <span className="text-sm font-bold text-cyan-400">{link.uniqueVisitorsCount || 0}</span>
+            <span className="text-sm font-bold text-cyan-400">{metricsReady ? link.uniqueVisitorsCount || 0 : '—'}</span>
           </div>
           <div className="bg-slate-950/40 p-2 rounded-lg">
             <span className="text-[10px] text-slate-400 block">Bots</span>
-            <span className="text-sm font-bold text-amber-400">{link.suspectBotsCount || 0}</span>
+            <span className="text-sm font-bold text-amber-400">{metricsReady ? link.suspectBotsCount || 0 : '—'}</span>
           </div>
         </div>
       </div>
@@ -256,3 +257,4 @@ export const LinkCard: React.FC<LinkCardProps> = ({ link, onToggleStatus, onDele
     </div>
   );
 };
+

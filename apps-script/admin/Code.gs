@@ -75,6 +75,13 @@ function apiRequest(method, requestPath, rawBody) {
     const path = normalizePath_(requestPath);
     const body = parseBody_(rawBody);
 
+    if (verb === "GET" && path === "/api/admin/bootstrap") {
+      return response_(200, {
+        adminEmail: assertAdmin_(),
+        setupAt: PropertiesService.getScriptProperties().getProperty("ADMIN_SETUP_AT"),
+        links: getAllLinks_(false)
+      });
+    }
     if (verb === "GET" && path === "/api/admin/status") {
       return response_(200, getAdminStatus_());
     }
@@ -85,7 +92,7 @@ function apiRequest(method, requestPath, rawBody) {
       return response_(200, { queue: getFailureQueue_() });
     }
     if (verb === "POST" && path === "/api/admin/validate-sheet") {
-      return response_(200, validateSheet_(body.spreadsheetUrl));
+      return response_(200, validateSheet_(body.spreadsheetUrl, body.aba));
     }
     if (verb === "POST" && path === "/api/admin/links") {
       return response_(201, { success: true, link: createLink_(body) });
@@ -241,7 +248,7 @@ function getAdminStatus_() {
   };
 }
 
-function getAllLinks_() {
+function getAllLinks_(includeStats) {
   const registry = getRegistry_();
   const sheet = registry.getSheetByName("Links");
   if (!sheet || sheet.getLastRow() < 2) return [];
@@ -286,7 +293,7 @@ function getAllLinks_() {
     });
   }
 
-  const stats = getClickStats_(links);
+  const stats = includeStats === false ? {} : getClickStats_(links);
   links.forEach(function (link) {
     const key = link.id;
     const item = stats[key] || {};
@@ -349,11 +356,11 @@ function getClickStats_(links) {
   return result;
 }
 
-function validateSheet_(spreadsheetUrl) {
+function validateSheet_(spreadsheetUrl, aba) {
   const spreadsheetId = extractSpreadsheetId_(spreadsheetUrl);
   if (!spreadsheetId) throw new Error("Cole uma URL válida do Google Sheets.");
   const spreadsheet = SpreadsheetApp.openById(spreadsheetId);
-  ensureClickSheet_(spreadsheet, "Cliques");
+  ensureClickSheet_(spreadsheet, String(aba || "Cliques"));
   return {
     success: true,
     spreadsheetId: spreadsheetId,
@@ -362,15 +369,61 @@ function validateSheet_(spreadsheetUrl) {
   };
 }
 
+/** Resolve only existing registry associations; never silently choose an ambiguous target. */
+function resolveCampaign_(input, links) {
+  const name = String(input.campaign || "").trim();
+  const rawUrl = String(input.spreadsheetUrl || "").trim();
+  const id = extractSpreadsheetId_(rawUrl);
+  const aba = String(input.aba || "").trim();
+  if (rawUrl && !id) throw new Error("Link da planilha Google inválido.");
+  const catalog = Object.create(null);
+  links.forEach(function (link) {
+    const campaign = String(link.campaign || "").trim();
+    if (!campaign || !link.spreadsheetId) return;
+    if (!catalog[campaign]) catalog[campaign] = [];
+    const tab = link.aba || "Cliques";
+    if (!catalog[campaign].some(function (t) { return t.spreadsheetId === link.spreadsheetId && t.aba === tab; })) {
+      catalog[campaign].push({ spreadsheetId: link.spreadsheetId, aba: tab });
+    }
+  });
+  const names = Object.keys(catalog);
+  const matches = names.filter(function (n) { return n.toLowerCase() === name.toLowerCase(); });
+  let campaign = names.indexOf(name) >= 0 ? name : matches.length === 1 ? matches[0] : "";
+  const sheetCampaigns = names.filter(function (n) {
+    return catalog[n].some(function (t) { return t.spreadsheetId === id; });
+  });
+  if (!campaign && sheetCampaigns.length === 1) campaign = sheetCampaigns[0];
+  if (!campaign && sheetCampaigns.length > 1) {
+    throw new Error("Esta planilha pertence a mais de uma campanha. Selecione a campanha desejada.");
+  }
+  if (campaign) {
+    const targets = catalog[campaign].filter(function (t) {
+      return (!id || t.spreadsheetId === id) && (!aba || t.aba === aba);
+    });
+    if (targets.length === 0) throw new Error("A planilha informada não pertence à campanha selecionada.");
+    if (targets.length > 1) throw new Error("Esta campanha possui mais de uma planilha ou aba. Escolha onde registrar os cliques.");
+    return {
+      campaign: campaign,
+      spreadsheetId: targets[0].spreadsheetId,
+      spreadsheetUrl: "https://docs.google.com/spreadsheets/d/" + targets[0].spreadsheetId + "/edit",
+      aba: targets[0].aba
+    };
+  }
+  if (!name) throw new Error("A campanha é obrigatória.");
+  if (!id) throw new Error("Cole a planilha da nova campanha ou selecione uma campanha existente.");
+  return { campaign: name, spreadsheetId: id, spreadsheetUrl: "https://docs.google.com/spreadsheets/d/" + id + "/edit", aba: "Cliques" };
+}
+
 function createLink_(input) {
   const name = String(input.name || "").trim();
-  const campaign = String(input.campaign || "").trim();
+  const association = resolveCampaign_(input, getAllLinks_(false));
+  const campaign = association.campaign;
   const source = String(input.source || "").trim();
   if (!name) throw new Error("O nome do link é obrigatório.");
   if (!campaign) throw new Error("A campanha é obrigatória.");
   if (!source) throw new Error("A origem é obrigatória.");
 
-  const spreadsheetId = extractSpreadsheetId_(input.spreadsheetUrl);
+  const spreadsheetId = association.spreadsheetId;
   if (!spreadsheetId) throw new Error("Link da planilha Google inválido.");
   const destinationType = String(input.destinationType || "");
   if (destinationType !== "url" && destinationType !== "whatsapp") {
@@ -391,7 +444,7 @@ function createLink_(input) {
   }
 
   const spreadsheet = SpreadsheetApp.openById(spreadsheetId);
-  ensureClickSheet_(spreadsheet, "Cliques");
+  ensureClickSheet_(spreadsheet, association.aba);
   const registry = getRegistry_();
   let linksSheet = registry.getSheetByName("Links");
   if (!linksSheet) linksSheet = registry.insertSheet("Links");
@@ -402,7 +455,8 @@ function createLink_(input) {
     id: id,
     name: name,
     spreadsheetId: spreadsheetId,
-    spreadsheetUrl: String(input.spreadsheetUrl).trim(),
+    spreadsheetUrl: association.spreadsheetUrl,
+    aba: association.aba,
     spreadsheetTitle: spreadsheet.getName(),
     destinationType: destinationType,
     destinationUrl: destinationUrl,
@@ -427,7 +481,7 @@ function createLink_(input) {
     nome: name,
     campanha: campaign,
     spreadsheetId: spreadsheetId,
-    aba: "Cliques",
+    aba: association.aba,
     destinoUrl: destinationUrl,
     ativo: true,
     source: source,
@@ -459,7 +513,7 @@ function updateLinkStatus_(id, status) {
     if (String(values[i][idColumn]).trim() !== id) continue;
     sheet.getRange(i + 1, statusColumn + 1).setValue(status === "active");
     if (updatedColumn !== undefined) sheet.getRange(i + 1, updatedColumn + 1).setValue(new Date().toISOString());
-    const link = getAllLinks_().find(function (item) { return item.id === id; });
+    const link = getAllLinks_(false).find(function (item) { return item.id === id; });
     return link || null;
   }
   return null;
@@ -806,3 +860,4 @@ function escapeHtml_(value) {
   return String(value).replace(/&/g, "&amp;").replace(/</g, "&lt;")
     .replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
 }
+
