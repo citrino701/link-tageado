@@ -261,7 +261,8 @@ function retryFailedClicks() {
   const sheet = registry.getSheetByName("Falhas");
   if (!sheet || sheet.getLastRow() < 2) return { success: true, processed: 0 };
 
-  const headers = ensureFailureSheet_(registry);
+  ensureFailureSheet_(registry);
+  const headers = headerMap_(sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0]);
   const values = sheet.getDataRange().getValues();
   const payloadColumn = headers.payload_json;
   const statusColumn = headers.status;
