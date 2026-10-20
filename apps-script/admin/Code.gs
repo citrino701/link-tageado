@@ -2,8 +2,6 @@ const ADMIN_DEFAULT_EMAIL = "hugoviajante@gmail.com";
 const REGISTRY_PROPERTY = "TRACKER_REGISTRY_ID";
 const ADMIN_EMAIL_PROPERTY = "ADMIN_EMAIL";
 const PUBLIC_LINK_BASE_PROPERTY = "PUBLIC_LINK_BASE_URL";
-const CLOUDFLARE_MANAGE_URL_PROPERTY = "CLOUDFLARE_MANAGE_URL";
-const CLOUDFLARE_SYNC_TOKEN_PROPERTY = "CLOUDFLARE_SYNC_TOKEN";
 const PUBLIC_ASSET_BASE = "https://citrino701.github.io/link-tageado/app";
 
 const REGISTRY_HEADERS = [
@@ -89,6 +87,9 @@ function apiRequest(method, requestPath, rawBody) {
     }
     if (verb === "GET" && path === "/api/admin/links") {
       return response_(200, { links: getAllLinks_() });
+    }
+    if (verb === "POST" && path === "/api/admin/analytics") {
+      return response_(200, getAnalytics_(body));
     }
     if (verb === "GET" && path === "/api/admin/queue") {
       return response_(200, { queue: getFailureQueue_() });
@@ -358,6 +359,104 @@ function getClickStats_(links) {
   return result;
 }
 
+/**
+ * Builds dashboard charts only when the administrator opens the analytics tab.
+ * Reads only the click sheets used by the selected campaign/link and caches the
+ * compact aggregate briefly so changing back to the tab does not rescan Sheets.
+ */
+function getAnalytics_(filters) {
+  const allowedDays = [7, 30, 90];
+  const days = allowedDays.indexOf(Number(filters.days)) >= 0 ? Number(filters.days) : 30;
+  const campaign = String(filters.campaign || "all");
+  const selectedLinkId = String(filters.linkId || "all");
+  const cache = CacheService.getScriptCache();
+  const cacheKey = "hub-analytics-" + Utilities.base64EncodeWebSafe(
+    Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, [campaign, selectedLinkId, days].join("|"))
+  ).slice(0, 32);
+  const cached = cache.get(cacheKey);
+  if (cached) return JSON.parse(cached);
+
+  const links = getAllLinks_(false).filter(function (link) {
+    return (campaign === "all" || link.campaign === campaign) &&
+      (selectedLinkId === "all" || link.id === selectedLinkId);
+  });
+  const tz = Session.getScriptTimeZone() || "America/Sao_Paulo";
+  const today = new Date();
+  const todayKey = Utilities.formatDate(today, tz, "yyyy-MM-dd");
+  const startDate = new Date(today.getTime() - (days - 1) * 24 * 60 * 60 * 1000);
+  const startKey = Utilities.formatDate(startDate, tz, "yyyy-MM-dd");
+  const dailyCounts = {};
+  const hourlyCounts = [];
+  const linkCounts = {};
+  for (let hour = 0; hour < 24; hour++) hourlyCounts.push(0);
+  links.forEach(function (link) { linkCounts[link.id] = 0; });
+
+  const groups = {};
+  links.forEach(function (link) {
+    if (!link.spreadsheetId) return;
+    const tab = link.aba || "Cliques";
+    const key = link.spreadsheetId + "::" + tab;
+    if (!groups[key]) groups[key] = { spreadsheetId: link.spreadsheetId, tab: tab, ids: {} };
+    groups[key].ids[link.id] = true;
+  });
+
+  Object.keys(groups).forEach(function (key) {
+    const group = groups[key];
+    const sheet = SpreadsheetApp.openById(group.spreadsheetId).getSheetByName(group.tab);
+    if (!sheet || sheet.getLastRow() < 2) return;
+    const values = sheet.getDataRange().getValues();
+    const headers = headerMap_(values[0]);
+    if (headers.data_hora === undefined || headers.link_id === undefined) {
+      throw new Error('A aba "' + group.tab + '" precisa das colunas data_hora e link_id para gerar gráficos.');
+    }
+    for (let rowIndex = 1; rowIndex < values.length; rowIndex++) {
+      const row = values[rowIndex];
+      const id = String(row[headers.link_id] || "").trim();
+      if (!group.ids[id]) continue;
+      const browser = headers.navegador === undefined ? "" : String(row[headers.navegador] || "");
+      const markedBot = headers.suspeito_bot !== undefined && isActive_(row[headers.suspeito_bot]);
+      if (markedBot || /bot|crawler|spider|preview|whatsapp|facebookexternalhit|telegrambot/i.test(browser)) continue;
+
+      const rawDate = row[headers.data_hora];
+      const date = rawDate instanceof Date ? rawDate : new Date(rawDate);
+      if (isNaN(date.getTime())) continue;
+      const dateKey = Utilities.formatDate(date, tz, "yyyy-MM-dd");
+      if (dateKey < startKey || dateKey > todayKey) continue;
+      const hour = Number(Utilities.formatDate(date, tz, "H"));
+      dailyCounts[dateKey] = (dailyCounts[dateKey] || 0) + 1;
+      hourlyCounts[hour]++;
+      linkCounts[id] = (linkCounts[id] || 0) + 1;
+    }
+  });
+
+  const daily = [];
+  for (let offset = 0; offset < days; offset++) {
+    const date = new Date(startDate.getTime() + offset * 24 * 60 * 60 * 1000);
+    const dateKey = Utilities.formatDate(date, tz, "yyyy-MM-dd");
+    daily.push({
+      date: dateKey,
+      label: Utilities.formatDate(date, tz, "dd/MM"),
+      clicks: dailyCounts[dateKey] || 0
+    });
+  }
+  const namesById = {};
+  links.forEach(function (link) { namesById[link.id] = link.name; });
+  const topLinks = Object.keys(linkCounts).map(function (id) {
+    return { id: id, name: namesById[id] || id, clicks: linkCounts[id] };
+  }).sort(function (a, b) { return b.clicks - a.clicks; }).slice(0, 10);
+  const result = {
+    campaign: campaign,
+    linkId: selectedLinkId,
+    days: days,
+    totalClicks: daily.reduce(function (sum, item) { return sum + item.clicks; }, 0),
+    daily: daily,
+    hourly: hourlyCounts.map(function (clicks, hour) { return { hour: hour, clicks: clicks }; }),
+    topLinks: topLinks
+  };
+  cache.put(cacheKey, JSON.stringify(result), 120);
+  return result;
+}
+
 function validateSheet_(spreadsheetUrl, aba) {
   const spreadsheetId = extractSpreadsheetId_(spreadsheetUrl);
   if (!spreadsheetId) throw new Error("Cole uma URL válida do Google Sheets.");
@@ -499,63 +598,7 @@ function createLink_(input) {
     updatedAt: now
   };
   linksSheet.appendRow(headersToRow_(headerMap, values));
-  try {
-    link.cloudflareSynced = syncCloudflareLinks_([{
-      id: link.id,
-      destinationUrl: link.destinationUrl,
-      active: true
-    }]);
-  } catch (syncError) {
-    link.cloudflareSynced = false;
-    console.error("Cloudflare link sync failed:", syncError && syncError.message || syncError);
-  }
   return link;
-}
-
-function syncAllLinksToCloudflare() {
-  const props = PropertiesService.getScriptProperties();
-  if (!props.getProperty(CLOUDFLARE_SYNC_TOKEN_PROPERTY)) {
-    throw new Error("Configure CLOUDFLARE_SYNC_TOKEN antes de sincronizar.");
-  }
-  const links = getAllLinks_(false);
-  let synchronized = 0;
-  for (let i = 0; i < links.length; i += 500) {
-    const batch = links.slice(i, i + 500).map(function (link) {
-      return {
-        id: link.id,
-        destinationUrl: link.destinationUrl,
-        active: link.status === "active"
-      };
-    });
-    if (batch.length) {
-      syncCloudflareLinks_(batch);
-      synchronized += batch.length;
-    }
-  }
-  return { success: true, synchronized: synchronized };
-}
-
-function syncCloudflareLinks_(links) {
-  if (!links || !links.length) return true;
-  const props = PropertiesService.getScriptProperties();
-  const token = String(props.getProperty(CLOUDFLARE_SYNC_TOKEN_PROPERTY) || "").trim();
-  if (!token) return false;
-  const url = String(props.getProperty(CLOUDFLARE_MANAGE_URL_PROPERTY) ||
-    "https://linkshorter.pages.dev/api/manage-links").trim();
-  const response = UrlFetchApp.fetch(url, {
-    method: "post",
-    contentType: "application/json",
-    headers: { Authorization: "Bearer " + token },
-    payload: JSON.stringify({ links: links }),
-    muteHttpExceptions: true
-  });
-  const status = response.getResponseCode();
-  let result = {};
-  try { result = JSON.parse(response.getContentText() || "{}"); } catch (ignored) {}
-  if (status < 200 || status >= 300 || result.ok !== true) {
-    throw new Error(result.error || "Cloudflare recusou a sincronização (HTTP " + status + ").");
-  }
-  return true;
 }
 
 function updateLinkStatus_(id, status) {
@@ -572,23 +615,6 @@ function updateLinkStatus_(id, status) {
     sheet.getRange(i + 1, statusColumn + 1).setValue(status === "active");
     if (updatedColumn !== undefined) sheet.getRange(i + 1, updatedColumn + 1).setValue(new Date().toISOString());
     const link = getAllLinks_(false).find(function (item) { return item.id === id; });
-    if (link) {
-      try {
-        link.cloudflareSynced = syncCloudflareLinks_([{
-          id: link.id,
-          destinationUrl: link.destinationUrl,
-          active: link.status === "active"
-        }]);
-      } catch (syncError) {
-        // Do not report a successful deactivation while KV still has the old state.
-        sheet.getRange(i + 1, statusColumn + 1).setValue(values[i][statusColumn]);
-        if (updatedColumn !== undefined) {
-          sheet.getRange(i + 1, updatedColumn + 1).setValue(values[i][updatedColumn]);
-        }
-        throw new Error("Não consegui sincronizar o status com o Cloudflare; mantive o status anterior. " +
-          (syncError.message || String(syncError)));
-      }
-    }
     return link || null;
   }
   return null;
@@ -601,12 +627,6 @@ function deleteLink_(id) {
   const headers = headerMap_(values[0]);
   for (let i = values.length - 1; i > 0; i--) {
     if (String(values[i][headers.id]).trim() === id) {
-      try {
-        syncCloudflareLinks_([{ id: id, removed: true }]);
-      } catch (syncError) {
-        throw new Error("Não removi o link: falhou a sincronização com o Cloudflare. " +
-          (syncError.message || String(syncError)));
-      }
       sheet.deleteRow(i + 1);
       return true;
     }
