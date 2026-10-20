@@ -10,6 +10,7 @@ on:
       - "vite.config.ts"
       - "vite.gas.config.ts"
       - "apps-script/**"
+      - "functions/**"
       - ".github/workflows/build-apps-script-ui.yml"
   push:
     branches: [main]
@@ -50,7 +51,7 @@ jobs:
         run: |
           node --import tsx --test src/utils/campaigns.test.ts
           node --import tsx --test src/utils/public-link.test.ts
-          node --test apps-script/public/tracker.test.mjs
+          node --test apps-script/public/tracker.test.mjs apps-script/admin/admin-stats.test.mjs functions/_middleware.test.mjs
 
       - name: Build React assets for Apps Script
         run: npm run build:gas-ui

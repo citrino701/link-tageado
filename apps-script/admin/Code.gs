@@ -350,10 +350,9 @@ function getClickStats_(links) {
         const userAgentColumn = headers.navegador;
         const browser = userAgentColumn === undefined ? "" : String(row[userAgentColumn] || "");
         const markedBot = botColumn !== undefined && isActive_(row[botColumn]);
-        if (markedBot || /bot|crawler|spider|preview|whatsapp|facebookexternalhit|telegrambot/i.test(browser)) {
-          result[id].bots++;
-        }
-        if (visitorColumn !== undefined) {
+        const bot = isBotRecord_(browser, markedBot);
+        if (bot) result[id].bots++;
+        if (!bot && visitorColumn !== undefined) {
           const visitor = String(row[visitorColumn] || "").trim();
           if (visitor) result[id].visitors[visitor] = true;
         }
@@ -430,7 +429,7 @@ function getAnalytics_(filters) {
 
       const browser = headers.navegador === undefined ? "" : String(row[headers.navegador] || "");
       const flagged = headers.suspeito_bot !== undefined && isActive_(row[headers.suspeito_bot]);
-      const isBot = flagged || /bot|crawler|spider|preview|whatsapp|facebookexternalhit|telegrambot/i.test(browser);
+      const isBot = isBotRecord_(browser, flagged);
       const link = linksById[id];
       records.push({
         rowNumber: rowIndex + 1,
@@ -1168,7 +1167,21 @@ function safeCell_(value) {
 }
 
 function isBot_(userAgent) {
-  return /bot|crawler|spider|preview|whatsapp|facebookexternalhit|telegrambot/i.test(String(userAgent || ""));
+  const ua = String(userAgent || "");
+  if (/bot|crawler|spider|preview|facebookexternalhit|telegrambot/i.test(ua)) return true;
+  // "WhatsApp" also appears in real in-app browser UAs. Only treat it as a bot
+  // when it lacks the normal browser/WebView signatures.
+  const hasBrowser = /mozilla|applewebkit|chrome|safari|firefox|edg|opr/i.test(ua);
+  return /whatsapp/i.test(ua) && !hasBrowser;
+}
+
+function isBotRecord_(userAgent, explicitlyMarked) {
+  const ua = String(userAgent || "");
+  const humanWhatsAppWebView = /whatsapp/i.test(ua) &&
+    /mozilla|applewebkit|chrome|safari|firefox|edg|opr/i.test(ua);
+  // Re-evaluate old rows too, so a past blanket WhatsApp flag does not
+  // permanently count an actual in-app browser visit as a bot.
+  return !humanWhatsAppWebView && (Boolean(explicitlyMarked) || isBot_(ua));
 }
 
 function isoValue_(value) {

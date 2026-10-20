@@ -2,26 +2,35 @@
 
 /* Theme tokens override Tailwind utility colors while preserving the existing layout. */
 [data-theme="paper"] {
-  --color-slate-950: #f5f1e8;
+  --color-slate-950: #f7f5ef;
   --color-slate-900: #ffffff;
-  --color-slate-850: #fffdf8;
-  --color-slate-800: #eee8dc;
-  --color-slate-700: #ddd4c4;
-  --color-slate-600: #c9beab;
-  --color-slate-500: #776f63;
-  --color-slate-400: #655d52;
-  --color-slate-300: #50483e;
-  --color-slate-200: #38332d;
-  --color-slate-100: #27231e;
-  --color-emerald-950: #fff4c7;
-  --color-emerald-600: #c28b00;
-  --color-emerald-500: #d8a500;
-  --color-emerald-400: #a87700;
-  --color-emerald-300: #875f00;
-  --color-teal-500: #d8a500;
-  --color-teal-400: #a87700;
-  --color-blue-400: #2563eb;
-  --color-rose-400: #dc2626;
+  --color-slate-850: #fcfbf7;
+  --color-slate-800: #efede6;
+  --color-slate-700: #e0ddd3;
+  --color-slate-600: #c8c2b6;
+  --color-slate-500: #777168;
+  --color-slate-400: #696359;
+  --color-slate-300: #514c44;
+  --color-slate-200: #3e3932;
+  --color-slate-100: #2e2a25;
+  --color-emerald-950: #fbf4dc;
+  --color-emerald-600: #887342;
+  --color-emerald-500: #ead796;
+  --color-emerald-400: #725e32;
+  --color-emerald-300: #604d25;
+  --color-teal-500: #ead796;
+  --color-teal-400: #725e32;
+  --color-cyan-500: #dfe9df;
+  --color-cyan-400: #466a53;
+  --color-blue-950: #f8eee9;
+  --color-blue-500: #b86c56;
+  --color-blue-400: #965440;
+  --color-indigo-950: #f2eee6;
+  --color-indigo-500: #b29a75;
+  --color-indigo-400: #806b4e;
+  --color-indigo-300: #725e48;
+  --color-rose-400: #b84b43;
+  --color-amber-400: #8a6428;
 }
 [data-theme="violet"] {
   --color-slate-950: #100d1b;
@@ -45,6 +54,6 @@
   --color-cyan-500: #0891b2;
   --color-cyan-400: #22d3ee;
 }
-[data-theme="paper"] [data-metric-number="real"] { color: #2563eb; }
-[data-theme="paper"] [data-metric-number="total"] { color: #dc2626; }
-[data-theme="paper"] [data-metric-number="unique"] { color: #2563eb; }
+[data-theme="paper"] [data-metric-number="real"] { color: #3d7458; }
+[data-theme="paper"] [data-metric-number="total"] { color: #b84b43; }
+[data-theme="paper"] [data-metric-number="unique"] { color: #725e32; }
