@@ -97,3 +97,12 @@ test('older shared URLs can still override the stored tags', () => {
   assert.deepEqual(f.rows[0].slice(5, 11), ['QR_Code', 'QR_Code', 'impresso', 'Evento', 'Cartaz', 'teste']);
   assert.equal(bridgeParams('?id=test&origem=Manual&utm_source=QR_Code').origem, 'Manual');
 });
+
+
+test('bot detection does not classify a real WhatsApp webview as a bot', () => {
+  const context = vm.createContext({});
+  vm.runInContext(source, context);
+  assert.equal(context.isBot_('WhatsApp/2.26.10'), true);
+  assert.equal(context.isBot_('Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Chrome/131.0 Mobile Safari/537.36 WhatsApp/2.26.10'), false);
+  assert.equal(context.isBot_('facebookexternalhit/1.1'), true);
+});
