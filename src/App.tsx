@@ -569,7 +569,6 @@ export default function App() {
                           link={link}
                           onToggleStatus={handleToggleStatus}
                           onDelete={handleDeleteLink}
-                  onEdit={setEditingLink}
                           onEdit={setEditingLink}
                         />
                       ))}
@@ -588,6 +587,7 @@ export default function App() {
                   link={link}
                   onToggleStatus={handleToggleStatus}
                   onDelete={handleDeleteLink}
+                  onEdit={setEditingLink}
                 />
               ))}
             </div>
