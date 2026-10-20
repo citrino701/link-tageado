@@ -238,7 +238,7 @@ export default function App() {
 
   // Distinct filter values
   const availableCampaigns = Array.from(new Set(links.map((l) => l.campaign).filter(Boolean)));
-  const listCampaignOptions = Array.from(new Set(links.map((link) => link.campaign || 'Sem Campanha'))).sort();
+  const listCampaignOptions = Array.from(new Set(links.map((link) => link.campaign || 'Sem Campanha')));
   const availableSources = Array.from(new Set(links.map((l) => l.source).filter(Boolean)));
   const availableSheets = Array.from(new Set(links.map((l) => l.spreadsheetTitle || l.spreadsheetId).filter(Boolean)));
 
@@ -527,7 +527,7 @@ export default function App() {
               <div>
                 <h4 className="text-base font-bold text-slate-200">Nenhum link encontrado</h4>
                 <p className="text-xs text-slate-400 max-w-md mx-auto mt-1">
-                  {searchTerm || campaignFilter !== 'all' || sourceFilter !== 'all' || statusFilter !== 'all'
+                  {searchTerm || (viewMode !== 'list' && campaignFilter !== 'all') || sourceFilter !== 'all' || statusFilter !== 'all'
                     ? 'Nenhum link corresponde aos filtros atuais. Tente ajustar os termos de busca.'
                     : 'Comece criando o primeiro link rastreável vinculado a uma Planilha Google.'}
                 </p>
