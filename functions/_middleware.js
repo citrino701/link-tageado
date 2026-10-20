@@ -52,9 +52,29 @@ async function logClick(scriptUrl, request, linkId, visitorId, clickId) {
   }
 }
 
+async function stableVisitorId(request) {
+  const saved = cookieValue(request, "hub_link_visitor_id");
+  if (saved) return saved;
+
+  // Use a short-lived browser cookie as the primary identifier. If cookies are
+  // blocked, derive a pseudonymous estimate from Cloudflare's client IP and UA;
+  // the raw IP is never sent to Apps Script or stored in Sheets.
+  const ip = request.headers.get("cf-connecting-ip");
+  if (!ip) return crypto.randomUUID();
+  const material = [
+    ip,
+    request.headers.get("user-agent") || "",
+    request.headers.get("accept-language") || "",
+    new URL(request.url).hostname
+  ].join("\n");
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(material));
+  const hex = Array.from(new Uint8Array(digest)).map(byte => byte.toString(16).padStart(2, "0")).join("");
+  return "edge_" + hex;
+}
+
 async function fallbackRedirect(scriptUrl, request, linkId) {
   const previousVisitorId = cookieValue(request, "hub_link_visitor_id");
-  const visitorId = previousVisitorId || crypto.randomUUID();
+  const visitorId = await stableVisitorId(request);
   const clickId = crypto.randomUUID();
   try {
     const response = await fetch(buildTrackingUrl(scriptUrl, request, linkId, visitorId, clickId), {
@@ -135,7 +155,7 @@ export async function onRequest(context) {
     });
   }
 
-  const visitorId = cookieValue(request, "hub_link_visitor_id") || crypto.randomUUID();
+  const visitorId = await stableVisitorId(request);
   const clickId = crypto.randomUUID();
   context.waitUntil(
     logClick(scriptUrl.toString(), request, id, visitorId, clickId)
