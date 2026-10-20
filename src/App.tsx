@@ -239,29 +239,14 @@ export default function App() {
       {/* Main Container */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
         <div className="flex gap-2 border-b border-slate-800" role="tablist" aria-label="Seções do dashboard">
-          <button
-            type="button"
-            role="tab"
-            aria-selected={activeTab === 'links'}
-            onClick={() => setActiveTab('links')}
-            className={`inline-flex items-center gap-2 px-4 py-3 text-sm font-semibold border-b-2 transition ${activeTab === 'links' ? 'border-emerald-400 text-emerald-300' : 'border-transparent text-slate-400 hover:text-slate-200'}`}
-          >
+          <button type="button" role="tab" aria-selected={activeTab === 'links'} onClick={() => setActiveTab('links')} className={`inline-flex items-center gap-2 px-4 py-3 text-sm font-semibold border-b-2 transition ${activeTab === 'links' ? 'border-emerald-400 text-emerald-300' : 'border-transparent text-slate-400 hover:text-slate-200'}`}>
             <Link2 className="w-4 h-4" /> Links e campanhas
           </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={activeTab === 'analytics'}
-            onClick={() => setActiveTab('analytics')}
-            className={`inline-flex items-center gap-2 px-4 py-3 text-sm font-semibold border-b-2 transition ${activeTab === 'analytics' ? 'border-emerald-400 text-emerald-300' : 'border-transparent text-slate-400 hover:text-slate-200'}`}
-          >
+          <button type="button" role="tab" aria-selected={activeTab === 'analytics'} onClick={() => setActiveTab('analytics')} className={`inline-flex items-center gap-2 px-4 py-3 text-sm font-semibold border-b-2 transition ${activeTab === 'analytics' ? 'border-emerald-400 text-emerald-300' : 'border-transparent text-slate-400 hover:text-slate-200'}`}>
             <BarChart3 className="w-4 h-4" /> Gráficos
           </button>
         </div>
-
-        {activeTab === 'analytics' ? (
-          <AnalyticsPanel links={links} campaigns={availableCampaigns} />
-        ) : <>
+        {activeTab === 'analytics' ? <AnalyticsPanel links={links} campaigns={availableCampaigns} /> : <>
         {/* Planilhas acessadas pelo Apps Script */}
         <ConnectSheetsCard
           adminEmail={adminEmail}
@@ -531,6 +516,7 @@ export default function App() {
             </div>
           )}
         </section>
+
         </>}
 
       </main>
