@@ -6,6 +6,7 @@ import {
   FileSpreadsheet,
   Power,
   Trash2,
+  Pencil,
   CheckCircle2,
   MessageCircle,
   Globe,
@@ -21,9 +22,10 @@ interface LinkCardProps {
   link: LinkRecord;
   onToggleStatus: (id: string, newStatus: 'active' | 'inactive') => void;
   onDelete: (id: string) => void;
+  onEdit: (link: LinkRecord) => void;
 }
 
-export const LinkCard: React.FC<LinkCardProps> = ({ link, onToggleStatus, onDelete, metricsReady = true }) => {
+export const LinkCard: React.FC<LinkCardProps> = ({ link, onToggleStatus, onDelete, onEdit, metricsReady = true }) => {
   const [copied, setCopied] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
@@ -198,6 +200,9 @@ export const LinkCard: React.FC<LinkCardProps> = ({ link, onToggleStatus, onDele
         </div>
 
         <div className="flex items-center gap-1.5">
+          <button onClick={() => onEdit(link)} className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold border border-slate-700 bg-slate-800 hover:bg-slate-700 text-slate-200 transition" title="Editar link">
+            <Pencil className="w-3.5 h-3.5" /><span>Editar</span>
+          </button>
           {/* Deactivate / Activate button */}
           <button
             onClick={() => onToggleStatus(link.id, isActive ? 'inactive' : 'active')}
