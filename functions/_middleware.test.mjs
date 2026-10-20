@@ -1,13 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { webcrypto } from 'node:crypto';
 import { onRequest } from './_middleware.js';
 
 test('repeated hits keep one visitor when the browser does not return cookies', async () => {
   const originalFetch = globalThis.fetch;
-  const originalCrypto = globalThis.crypto;
   const requests = [];
-  globalThis.crypto = webcrypto;
   globalThis.fetch = async url => {
     requests.push(new URL(url));
     return new Response(JSON.stringify({ ok: true, destination: 'https://example.com/' }), {
@@ -46,6 +43,5 @@ test('repeated hits keep one visitor when the browser does not return cookies', 
     assert.ok(requests[0].searchParams.get('click_id') !== requests[1].searchParams.get('click_id'));
   } finally {
     globalThis.fetch = originalFetch;
-    globalThis.crypto = originalCrypto;
   }
 });
