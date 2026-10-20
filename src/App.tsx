@@ -8,6 +8,8 @@ import {
   AlertCircle,
   Layers,
   LayoutGrid,
+  List,
+  Settings,
   Tag,
   BarChart3,
 } from 'lucide-react';
@@ -23,6 +25,8 @@ import { SyncQueueModal } from './components/SyncQueueModal.tsx';
 import { DiagnosticTestsModal } from './components/DiagnosticTestsModal.tsx';
 import { LinkRecord, SyncQueueItem } from './services/store.ts';
 import { AnalyticsPanel } from './components/AnalyticsPanel.tsx';
+import { LinkListView } from './components/LinkListView.tsx';
+import { SettingsPanel } from './components/SettingsPanel.tsx';
 
 export default function App() {
   const [adminEmail, setAdminEmail] = useState('hugoviajante@gmail.com');
@@ -45,20 +49,20 @@ export default function App() {
   const [sourceFilter, setSourceFilter] = useState('all');
   const [sheetFilter, setSheetFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
-  const [viewMode, setViewMode] = useState<'grouped' | 'grid'>('grouped');
+  const [viewMode, setViewMode] = useState<'grouped' | 'grid' | 'list'>('grouped');
 
   // Modals
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [editingLink, setEditingLink] = useState<LinkRecord | null>(null);
-  const [theme, setTheme] = useState<'night' | 'paper' | 'violet' | 'ocean'>(() => {
+  const [theme, setTheme] = useState<'night' | 'paper' | 'violet' | 'ocean' | 'emerald-glass'>(() => {
     const saved = localStorage.getItem('hub-theme');
-    return saved === 'paper' || saved === 'violet' || saved === 'ocean' ? saved : 'night';
+    return saved === 'paper' || saved === 'violet' || saved === 'ocean' || saved === 'emerald-glass' ? saved : 'night';
   });
   useEffect(() => { localStorage.setItem('hub-theme', theme); }, [theme]);
 
   const [isQueueModalOpen, setIsQueueModalOpen] = useState(false);
   const [isTestsModalOpen, setIsTestsModalOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState<'links' | 'analytics'>('links');
+  const [activeTab, setActiveTab] = useState<'links' | 'analytics' | 'settings'>('links');
 
   // Toast
   const [toast, setToast] = useState<{
@@ -234,6 +238,7 @@ export default function App() {
 
   // Distinct filter values
   const availableCampaigns = Array.from(new Set(links.map((l) => l.campaign).filter(Boolean)));
+  const listCampaignOptions = Array.from(new Set(links.map((link) => link.campaign || 'Sem Campanha')));
   const availableSources = Array.from(new Set(links.map((l) => l.source).filter(Boolean)));
   const availableSheets = Array.from(new Set(links.map((l) => l.spreadsheetTitle || l.spreadsheetId).filter(Boolean)));
 
@@ -247,7 +252,7 @@ export default function App() {
       const matchPath = link.shortPath.toLowerCase().includes(term);
       if (!matchName && !matchCamp && !matchSrc && !matchPath) return false;
     }
-    if (campaignFilter !== 'all' && link.campaign !== campaignFilter) return false;
+    if (viewMode !== 'list' && campaignFilter !== 'all' && link.campaign !== campaignFilter) return false;
     if (sourceFilter !== 'all' && link.source !== sourceFilter) return false;
     if (sheetFilter !== 'all' && (link.spreadsheetTitle !== sheetFilter && link.spreadsheetId !== sheetFilter))
       return false;
@@ -301,62 +306,71 @@ export default function App() {
         </div>
       )}
 
-      {/* Navbar */}
-      <Navbar
-        adminEmail={adminEmail}
-        onOpenTests={() => setIsTestsModalOpen(true)}
-        theme={theme}
-        onThemeChange={setTheme}
-        onSyncCloudflare={handleSyncCloudflare}
-        isCloudflareSyncing={isCloudflareSyncing}
-      />
+      <Navbar adminEmail={adminEmail} />
 
-      {/* Main Container */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
-        <div className="flex gap-2 border-b border-slate-800" role="tablist" aria-label="Seções do dashboard">
-          <button type="button" role="tab" aria-selected={activeTab === 'links'} onClick={() => setActiveTab('links')} className={`inline-flex items-center gap-2 px-4 py-3 text-sm font-semibold border-b-2 transition ${activeTab === 'links' ? 'border-emerald-400 text-emerald-300' : 'border-transparent text-slate-400 hover:text-slate-200'}`}>
-            <Link2 className="w-4 h-4" /> Links e campanhas
-          </button>
-          <button type="button" role="tab" aria-selected={activeTab === 'analytics'} onClick={() => setActiveTab('analytics')} className={`inline-flex items-center gap-2 px-4 py-3 text-sm font-semibold border-b-2 transition ${activeTab === 'analytics' ? 'border-emerald-400 text-emerald-300' : 'border-transparent text-slate-400 hover:text-slate-200'}`}>
-            <BarChart3 className="w-4 h-4" /> Gráficos
-          </button>
-        </div>
-        {activeTab === 'analytics' ? <AnalyticsPanel links={links} campaigns={availableCampaigns} /> : <>
+      <div className="mx-auto flex w-full max-w-[1600px] flex-1 flex-col gap-5 px-4 py-5 sm:px-6 lg:flex-row lg:gap-7 lg:px-8 lg:py-7">
+        <aside className="w-full shrink-0 lg:w-60" aria-label="Menu principal">
+          <div className="rounded-2xl border border-slate-800 bg-slate-900/80 p-3 shadow-sm lg:sticky lg:top-24">
+            <p className="px-3 pb-2 pt-1 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">Menu</p>
+            <nav className="grid grid-cols-3 gap-2 lg:grid-cols-1" role="tablist" aria-label="Seções do Hub">
+              <button type="button" role="tab" aria-selected={activeTab === 'links'} onClick={() => setActiveTab('links')} className={'flex items-center gap-2 rounded-xl px-3 py-3 text-left text-sm font-semibold transition ' + (activeTab === 'links' ? 'bg-emerald-500/15 text-emerald-300 ring-1 ring-emerald-400/25' : 'text-slate-400 hover:bg-slate-800/70 hover:text-slate-100')}>
+                <span className="nav-icon-glass flex h-8 w-8 shrink-0 items-center justify-center rounded-lg"><Link2 className="h-4 w-4" /></span> <span>Links</span>
+              </button>
+              <button type="button" role="tab" aria-selected={activeTab === 'analytics'} onClick={() => setActiveTab('analytics')} className={'flex items-center gap-2 rounded-xl px-3 py-3 text-left text-sm font-semibold transition ' + (activeTab === 'analytics' ? 'bg-emerald-500/15 text-emerald-300 ring-1 ring-emerald-400/25' : 'text-slate-400 hover:bg-slate-800/70 hover:text-slate-100')}>
+                <span className="nav-icon-glass flex h-8 w-8 shrink-0 items-center justify-center rounded-lg"><BarChart3 className="h-4 w-4" /></span> <span>Métricas</span>
+              </button>
+              <button type="button" role="tab" aria-selected={activeTab === 'settings'} onClick={() => setActiveTab('settings')} className={'flex items-center gap-2 rounded-xl px-3 py-3 text-left text-sm font-semibold transition ' + (activeTab === 'settings' ? 'bg-emerald-500/15 text-emerald-300 ring-1 ring-emerald-400/25' : 'text-slate-400 hover:bg-slate-800/70 hover:text-slate-100')}>
+                <span className="nav-icon-glass flex h-8 w-8 shrink-0 items-center justify-center rounded-lg"><Settings className="h-4 w-4" /></span> <span>Configurações</span>
+              </button>
+            </nav>
+          </div>
+        </aside>
+
+        <main className="min-w-0 flex-1 space-y-8">
+        {activeTab === 'analytics' ? <AnalyticsPanel links={links} campaigns={availableCampaigns} /> : activeTab === 'settings' ? (
+          <SettingsPanel
+            adminEmail={adminEmail}
+            theme={theme}
+            onThemeChange={setTheme}
+            onOpenTests={() => setIsTestsModalOpen(true)}
+            onSyncCloudflare={handleSyncCloudflare}
+            isCloudflareSyncing={isCloudflareSyncing}
+          />
+        ) : <>
         {/* Planilhas acessadas pelo Apps Script */}
         <ConnectSheetsCard
           adminEmail={adminEmail}
           setupAt={setupAt}
         />
 
-        {/* Step 2: KPI Metrics Overview */}
-        <section className="space-y-3">
-          <div className="flex items-center justify-between">
-            <h3 className="text-sm font-semibold text-slate-300 uppercase tracking-wider">
-              Métricas Consolidadas
-            </h3>
-            <button
-              onClick={() => void loadData()}
-              disabled={isLoading}
-              className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-slate-200 transition"
-              title="Atualizar métricas"
-            >
-              <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} />
-              <span>Atualizar</span>
-            </button>
-          </div>
-
-          <StatsOverview
-            metricsReady={metricsReady}
-            queueReady={queueReady}
-            totalLinks={totalLinks}
-            realClicks={realClicks}
-            totalClicks={totalClicks}
-            uniqueVisitors={uniqueVisitors}
-            suspectBots={suspectBots}
-            syncFailuresCount={syncQueue.length}
-            onOpenSyncQueue={() => setIsQueueModalOpen(true)}
-          />
-        </section>
+        {/* KPIs consolidados ficam fora da lista compacta; o detalhe mostra os números do link escolhido. */}
+        {viewMode !== 'list' && (
+          <section className="space-y-3">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-semibold text-slate-300 uppercase tracking-wider">Métricas Consolidadas</h3>
+              <button
+                onClick={() => void loadData()}
+                disabled={isLoading}
+                className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-slate-200 transition"
+                title="Atualizar métricas"
+              >
+                <RefreshCw className={'w-3.5 h-3.5 ' + (isLoading ? 'animate-spin' : '')} />
+                <span>Atualizar</span>
+              </button>
+            </div>
+            <StatsOverview
+              metricsReady={metricsReady}
+              queueReady={queueReady}
+              totalLinks={totalLinks}
+              realClicks={realClicks}
+              totalClicks={totalClicks}
+              uniqueVisitors={uniqueVisitors}
+              suspectBots={suspectBots}
+              syncFailuresCount={syncQueue.length}
+              onOpenSyncQueue={() => setIsQueueModalOpen(true)}
+            />
+          </section>
+        )}
 
         {/* Step 3: Links Management & Filtering */}
         <section className="space-y-4">
@@ -392,22 +406,22 @@ export default function App() {
               />
             </div>
 
-            {/* Campaign Filter */}
-            <div className="flex items-center gap-1.5">
-              <span className="text-[11px] text-slate-400 font-medium">Campanha:</span>
-              <select
-                value={campaignFilter}
-                onChange={(e) => setCampaignFilter(e.target.value)}
-                className="bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-emerald-500"
-              >
-                <option value="all">Todas as Campanhas</option>
-                {availableCampaigns.map((camp) => (
-                  <option key={camp} value={camp}>
-                    {camp}
-                  </option>
-                ))}
-              </select>
-            </div>
+            {/* No modo lista, a campanha é escolhida nos filtros próprios da lista. */}
+            {viewMode !== 'list' && (
+              <div className="flex items-center gap-1.5">
+                <span className="text-[11px] text-slate-400 font-medium">Campanha:</span>
+                <select
+                  value={campaignFilter}
+                  onChange={(e) => setCampaignFilter(e.target.value)}
+                  className="bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-emerald-500"
+                >
+                  <option value="all">Todas as Campanhas</option>
+                  {availableCampaigns.map((camp) => (
+                    <option key={camp} value={camp}>{camp}</option>
+                  ))}
+                </select>
+              </div>
+            )}
 
             {/* Source Filter */}
             <div className="flex items-center gap-1.5">
@@ -485,6 +499,17 @@ export default function App() {
                 <LayoutGrid className="w-3.5 h-3.5" />
                 <span>Grade</span>
               </button>
+              <button
+                type="button"
+                onClick={() => setViewMode('list')}
+                className={'flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-medium transition ' + (viewMode === 'list'
+                    ? 'bg-emerald-600 text-white font-semibold shadow-sm'
+                    : 'text-slate-400 hover:text-slate-200')}
+                title="Lista compacta; selecione um link para abrir as métricas detalhadas"
+              >
+                <List className="w-3.5 h-3.5" />
+                <span>Lista</span>
+              </button>
             </div>
           </div>
 
@@ -502,7 +527,7 @@ export default function App() {
               <div>
                 <h4 className="text-base font-bold text-slate-200">Nenhum link encontrado</h4>
                 <p className="text-xs text-slate-400 max-w-md mx-auto mt-1">
-                  {searchTerm || campaignFilter !== 'all' || sourceFilter !== 'all' || statusFilter !== 'all'
+                  {searchTerm || (viewMode !== 'list' && campaignFilter !== 'all') || sourceFilter !== 'all' || statusFilter !== 'all'
                     ? 'Nenhum link corresponde aos filtros atuais. Tente ajustar os termos de busca.'
                     : 'Comece criando o primeiro link rastreável vinculado a uma Planilha Google.'}
                 </p>
@@ -577,7 +602,7 @@ export default function App() {
                 );
               })}
             </div>
-          ) : (
+          ) : viewMode === 'grid' ? (
             /* Visualização em Grade Plana */
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {filteredLinks.map((link) => (
@@ -591,12 +616,22 @@ export default function App() {
                 />
               ))}
             </div>
+          ) : (
+            <LinkListView
+              links={filteredLinks}
+              campaigns={listCampaignOptions}
+              metricsReady={metricsReady}
+              onToggleStatus={handleToggleStatus}
+              onDelete={handleDeleteLink}
+              onEdit={setEditingLink}
+            />
           )}
         </section>
 
         </>}
 
-      </main>
+        </main>
+      </div>
 
       {/* Modals */}
       <CreateLinkModal
