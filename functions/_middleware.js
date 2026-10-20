@@ -52,6 +52,34 @@ async function logClick(scriptUrl, request, linkId, visitorId, clickId) {
   }
 }
 
+async function fallbackRedirect(scriptUrl, request, linkId) {
+  const previousVisitorId = cookieValue(request, "hub_link_visitor_id");
+  const visitorId = previousVisitorId || crypto.randomUUID();
+  const clickId = crypto.randomUUID();
+  try {
+    const response = await fetch(buildTrackingUrl(scriptUrl, request, linkId, visitorId, clickId), {
+      method: "GET",
+      redirect: "follow",
+      headers: { "accept": "application/json" }
+    });
+    const payload = await response.json();
+    // Apps Script still returns the destination when it queues a click-write failure.
+    if (payload && payload.destination) {
+      const destination = new URL(String(payload.destination));
+      if (destination.protocol !== "https:" && destination.protocol !== "http:") throw new Error("Invalid destination");
+      const headers = new Headers({ "location": destination.toString(), "cache-control": "no-store" });
+      if (!previousVisitorId) headers.append("set-cookie", "hub_link_visitor_id=" + encodeURIComponent(visitorId) + "; Path=/; Max-Age=31536000; Secure; SameSite=Lax");
+      return new Response(null, { status: 302, headers });
+    }
+  } catch (error) {
+    console.error("Apps Script fallback redirect failed:", error && error.message || error);
+  }
+  return new Response("Este link ainda não está disponível. Tente novamente em instantes.", {
+    status: 404,
+    headers: { "content-type": "text/plain; charset=utf-8", "cache-control": "no-store" }
+  });
+}
+
 export async function onRequest(context) {
   const request = context.request;
   const url = new URL(request.url);
@@ -80,11 +108,12 @@ export async function onRequest(context) {
     link = await context.env.LINKS.get("link:" + id, "json");
   } catch (error) {
     console.error("Cloudflare KV lookup failed:", error && error.message || error);
-    return context.next();
+    return fallbackRedirect(scriptUrl.toString(), request, id);
   }
 
-  // Missing KV entries still use the current Google Apps Script bridge.
-  if (!link) return context.next();
+  // KV is eventually consistent. A cold/missing key resolves through Apps Script,
+  // which returns the destination and records the click in the same request.
+  if (!link) return fallbackRedirect(scriptUrl.toString(), request, id);
 
   if (link.active === false) {
     return new Response("Este link está inativo.", {
