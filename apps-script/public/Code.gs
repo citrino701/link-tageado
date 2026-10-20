@@ -395,7 +395,12 @@ function safeCell_(value) {
 }
 
 function isBot_(userAgent) {
-  return /bot|crawler|spider|preview|whatsapp|facebookexternalhit|telegrambot/i.test(String(userAgent || ""));
+  const ua = String(userAgent || "");
+  if (/bot|crawler|spider|preview|facebookexternalhit|telegrambot/i.test(ua)) return true;
+  // "WhatsApp" also appears in real in-app browser UAs. Only treat it as a bot
+  // when it lacks the normal browser/WebView signatures.
+  const hasBrowser = /mozilla|applewebkit|chrome|safari|firefox|edg|opr/i.test(ua);
+  return /whatsapp/i.test(ua) && !hasBrowser;
 }
 
 function makeResponse_(result, callback) {
