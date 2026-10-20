@@ -42,7 +42,7 @@ function setupAdmin() {
 /**
  * Private Apps Script web app entry point. Deploy with:
  * Execute as: User accessing the web app
- * Who has access: Only myself
+ * Who has access: Anyone with a Google account; assertAdmin_ enforces the email allowlist.
  */
 function doGet() {
   try {
@@ -103,7 +103,7 @@ function apiRequest(method, requestPath, rawBody) {
     if (verb === "POST" && path === "/api/admin/links") {
       return response_(201, { success: true, link: createLink_(body) });
     }
-    const updateMatch = path.match(/^\\/api\\/admin\\/links\\/([^/]+)$/);
+    const updateMatch = path.match(/^\/api\/admin\/links\/([^/]+)$/);
     if (verb === "PUT" && updateMatch) {
       return response_(200, { success: true, link: updateLink_(decodeURIComponent(updateMatch[1]), body) });
     }
@@ -156,7 +156,7 @@ function assertAdmin_() {
   const activeEmail = String(Session.getActiveUser().getEmail() || "").trim().toLowerCase();
   const configuredEmails = String(
     PropertiesService.getScriptProperties().getProperty(ADMIN_EMAIL_PROPERTY) || ""
-  ).split(/[;,\\s]+/).map(function (email) { return email.trim().toLowerCase(); }).filter(Boolean);
+  ).split(/[;,\s]+/).map(function (email) { return email.trim().toLowerCase(); }).filter(Boolean);
   const allowedEmails = [ADMIN_DEFAULT_EMAIL].concat(ADDITIONAL_ADMIN_EMAILS).concat(configuredEmails);
   if (!activeEmail || allowedEmails.indexOf(activeEmail) < 0) {
     const error = new Error("Esta conta Google não está autorizada a acessar o Hub.");
@@ -723,7 +723,7 @@ function updateLink_(id, input) {
   let whatsappNumber = "";
   let whatsappMessage = "";
   if (destinationType === "whatsapp") {
-    whatsappNumber = String(input.whatsappNumber || "").replace(/\\D/g, "");
+    whatsappNumber = String(input.whatsappNumber || "").replace(/\D/g, "");
     if (whatsappNumber.length < 10) throw new Error("Informe WhatsApp com código do país e DDD.");
     whatsappMessage = String(input.whatsappMessage || "");
     destinationUrl = "https://wa.me/" + whatsappNumber + (whatsappMessage ? "?text=" + encodeURIComponent(whatsappMessage) : "");
