@@ -45,7 +45,7 @@ export const StatsOverview: React.FC<StatsOverviewProps> = ({
           <CheckCircle className="w-4 h-4" />
         </div>
         <div>
-          <span className="text-2xl font-bold text-emerald-400">{metricsReady ? realClicks : '—'}</span>
+          <span data-metric-number="real" className="text-2xl font-bold text-emerald-400">{metricsReady ? realClicks : '—'}</span>
           <p className="text-[11px] text-emerald-400/70 mt-0.5">exclui bots e robôs</p>
         </div>
       </div>
@@ -57,7 +57,7 @@ export const StatsOverview: React.FC<StatsOverviewProps> = ({
           <MousePointerClick className="w-4 h-4 text-indigo-400" />
         </div>
         <div>
-          <span className="text-2xl font-bold text-slate-100">{metricsReady ? totalClicks : '—'}</span>
+          <span data-metric-number="total" className="text-2xl font-bold text-slate-100">{metricsReady ? totalClicks : '—'}</span>
           <p className="text-[11px] text-slate-400 mt-0.5">todos os acessos</p>
         </div>
       </div>
@@ -69,7 +69,7 @@ export const StatsOverview: React.FC<StatsOverviewProps> = ({
           <Users className="w-4 h-4 text-cyan-400" />
         </div>
         <div>
-          <span className="text-2xl font-bold text-slate-100">{metricsReady ? uniqueVisitors : '—'}</span>
+          <span data-metric-number="unique" className="text-2xl font-bold text-slate-100">{metricsReady ? uniqueVisitors : '—'}</span>
           <p className="text-[11px] text-slate-400 mt-0.5">visitantes únicos est.</p>
         </div>
       </div>

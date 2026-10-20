@@ -1,4 +1,5 @@
 const ADMIN_DEFAULT_EMAIL = "hugoviajante@gmail.com";
+const ADDITIONAL_ADMIN_EMAILS = ["viniciusnunes293@gmail.com"];
 const REGISTRY_PROPERTY = "TRACKER_REGISTRY_ID";
 const ADMIN_EMAIL_PROPERTY = "ADMIN_EMAIL";
 const PUBLIC_LINK_BASE_PROPERTY = "PUBLIC_LINK_BASE_URL";
@@ -41,7 +42,7 @@ function setupAdmin() {
 /**
  * Private Apps Script web app entry point. Deploy with:
  * Execute as: User accessing the web app
- * Who has access: Only myself
+ * Who has access: Anyone with a Google account; assertAdmin_ enforces the email allowlist.
  */
 function doGet() {
   try {
@@ -102,6 +103,13 @@ function apiRequest(method, requestPath, rawBody) {
     if (verb === "POST" && path === "/api/admin/links") {
       return response_(201, { success: true, link: createLink_(body) });
     }
+    const updateMatch = path.match(/^\/api\/admin\/links\/([^/]+)$/);
+    if (verb === "PUT" && updateMatch) {
+      return response_(200, { success: true, link: updateLink_(decodeURIComponent(updateMatch[1]), body) });
+    }
+    if (verb === "POST" && path === "/api/admin/clicks/delete") {
+      return response_(200, deleteClicks_(body));
+    }
     if (verb === "POST" && path === "/api/admin/queue/retry") {
       return response_(200, retryFailures_());
     }
@@ -146,13 +154,12 @@ function include(filename) {
 
 function assertAdmin_() {
   const activeEmail = String(Session.getActiveUser().getEmail() || "").trim().toLowerCase();
-  const configuredEmail = String(
-    PropertiesService.getScriptProperties().getProperty(ADMIN_EMAIL_PROPERTY) ||
-    ADMIN_DEFAULT_EMAIL
-  ).trim().toLowerCase();
-
-  if (!activeEmail || activeEmail !== configuredEmail) {
-    const error = new Error("Entre com a conta autorizada: " + configuredEmail + ".");
+  const configuredEmails = String(
+    PropertiesService.getScriptProperties().getProperty(ADMIN_EMAIL_PROPERTY) || ""
+  ).split(/[;,\s]+/).map(function (email) { return email.trim().toLowerCase(); }).filter(Boolean);
+  const allowedEmails = [ADMIN_DEFAULT_EMAIL].concat(ADDITIONAL_ADMIN_EMAILS).concat(configuredEmails);
+  if (!activeEmail || allowedEmails.indexOf(activeEmail) < 0) {
+    const error = new Error("Esta conta Google não está autorizada a acessar o Hub.");
     error.statusCode = 403;
     throw error;
   }
@@ -361,32 +368,40 @@ function getClickStats_(links) {
   return result;
 }
 
+function analyticsCacheKey_(campaign, selectedLinkId, days) {
+  return "hub-analytics-" + Utilities.base64EncodeWebSafe(
+    Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, [campaign, selectedLinkId, days].join("|"))
+  ).slice(0, 32);
+}
+
 function getAnalytics_(filters) {
-  const allowedDays = [7, 30, 90];
-  const days = allowedDays.indexOf(Number(filters.days)) >= 0 ? Number(filters.days) : 30;
+  const days = [7, 30, 90].indexOf(Number(filters.days)) >= 0 ? Number(filters.days) : 30;
   const campaign = String(filters.campaign || "all");
   const selectedLinkId = String(filters.linkId || "all");
   const cache = CacheService.getScriptCache();
-  const cacheKey = "hub-analytics-" + Utilities.base64EncodeWebSafe(
-    Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, [campaign, selectedLinkId, days].join("|"))
-  ).slice(0, 32);
-  const cached = cache.get(cacheKey);
+  const key = analyticsCacheKey_(campaign, selectedLinkId, days);
+  const cached = cache.get(key);
   if (cached) return JSON.parse(cached);
 
   const links = getAllLinks_(false).filter(function (link) {
     return (campaign === "all" || link.campaign === campaign) &&
       (selectedLinkId === "all" || link.id === selectedLinkId);
   });
+  const linksById = {};
   const tz = Session.getScriptTimeZone() || "America/Sao_Paulo";
   const today = new Date();
   const todayKey = Utilities.formatDate(today, tz, "yyyy-MM-dd");
-  const startDate = new Date(today.getTime() - (days - 1) * 24 * 60 * 60 * 1000);
+  const startDate = new Date(today.getTime() - (days - 1) * 86400000);
   const startKey = Utilities.formatDate(startDate, tz, "yyyy-MM-dd");
   const dailyCounts = {};
   const hourlyCounts = [];
   const linkCounts = {};
+  const records = [];
   for (let hour = 0; hour < 24; hour++) hourlyCounts.push(0);
-  links.forEach(function (link) { linkCounts[link.id] = 0; });
+  links.forEach(function (link) {
+    linksById[link.id] = link;
+    linkCounts[link.id] = 0;
+  });
 
   const groups = {};
   links.forEach(function (link) {
@@ -403,44 +418,49 @@ function getAnalytics_(filters) {
     if (!sheet || sheet.getLastRow() < 2) return;
     const values = sheet.getDataRange().getValues();
     const headers = headerMap_(values[0]);
-    if (headers.data_hora === undefined || headers.link_id === undefined) {
-      throw new Error('A aba "' + group.tab + '" precisa das colunas data_hora e link_id para gerar gráficos.');
-    }
+    ensureHeadersPresent_(headers, ["data_hora", "link_id"]);
     for (let rowIndex = 1; rowIndex < values.length; rowIndex++) {
       const row = values[rowIndex];
       const id = String(row[headers.link_id] || "").trim();
       if (!group.ids[id]) continue;
-      const browser = headers.navegador === undefined ? "" : String(row[headers.navegador] || "");
-      const markedBot = headers.suspeito_bot !== undefined && isActive_(row[headers.suspeito_bot]);
-      if (markedBot || /bot|crawler|spider|preview|whatsapp|facebookexternalhit|telegrambot/i.test(browser)) continue;
-
-      const rawDate = row[headers.data_hora];
-      const date = rawDate instanceof Date ? rawDate : new Date(rawDate);
+      const date = row[headers.data_hora] instanceof Date ? row[headers.data_hora] : new Date(row[headers.data_hora]);
       if (isNaN(date.getTime())) continue;
       const dateKey = Utilities.formatDate(date, tz, "yyyy-MM-dd");
       if (dateKey < startKey || dateKey > todayKey) continue;
+
+      const browser = headers.navegador === undefined ? "" : String(row[headers.navegador] || "");
+      const flagged = headers.suspeito_bot !== undefined && isActive_(row[headers.suspeito_bot]);
+      const isBot = flagged || /bot|crawler|spider|preview|whatsapp|facebookexternalhit|telegrambot/i.test(browser);
+      const link = linksById[id];
+      records.push({
+        rowNumber: rowIndex + 1,
+        linkId: id,
+        linkName: link.name,
+        campaign: link.campaign,
+        source: headers.origem === undefined ? "" : String(row[headers.origem] || ""),
+        clickId: headers.click_id === undefined ? "" : String(row[headers.click_id] || "").trim(),
+        timestampMs: date.getTime(),
+        timestamp: Utilities.formatDate(date, tz, "dd/MM/yyyy HH:mm"),
+        isBot: isBot
+      });
+      if (isBot) continue;
       const hour = Number(Utilities.formatDate(date, tz, "H"));
       dailyCounts[dateKey] = (dailyCounts[dateKey] || 0) + 1;
       hourlyCounts[hour]++;
-      linkCounts[id] = (linkCounts[id] || 0) + 1;
+      linkCounts[id]++;
     }
   });
 
   const daily = [];
   for (let offset = 0; offset < days; offset++) {
-    const date = new Date(startDate.getTime() + offset * 24 * 60 * 60 * 1000);
+    const date = new Date(startDate.getTime() + offset * 86400000);
     const dateKey = Utilities.formatDate(date, tz, "yyyy-MM-dd");
-    daily.push({
-      date: dateKey,
-      label: Utilities.formatDate(date, tz, "dd/MM"),
-      clicks: dailyCounts[dateKey] || 0
-    });
+    daily.push({ date: dateKey, label: Utilities.formatDate(date, tz, "dd/MM"), clicks: dailyCounts[dateKey] || 0 });
   }
-  const namesById = {};
-  links.forEach(function (link) { namesById[link.id] = link.name; });
   const topLinks = Object.keys(linkCounts).map(function (id) {
-    return { id: id, name: namesById[id] || id, clicks: linkCounts[id] };
+    return { id: id, name: linksById[id].name, clicks: linkCounts[id] };
   }).sort(function (a, b) { return b.clicks - a.clicks; }).slice(0, 10);
+  records.sort(function (a, b) { return b.timestampMs - a.timestampMs; });
   const result = {
     campaign: campaign,
     linkId: selectedLinkId,
@@ -448,10 +468,84 @@ function getAnalytics_(filters) {
     totalClicks: daily.reduce(function (sum, item) { return sum + item.clicks; }, 0),
     daily: daily,
     hourly: hourlyCounts.map(function (clicks, hour) { return { hour: hour, clicks: clicks }; }),
-    topLinks: topLinks
+    topLinks: topLinks,
+    clickRecords: records.slice(0, 100)
   };
-  cache.put(cacheKey, JSON.stringify(result), 120);
+  cache.put(key, JSON.stringify(result), 120);
   return result;
+}
+
+function deleteClicks_(body) {
+  const items = Array.isArray(body.items) ? body.items : [];
+  if (!items.length || items.length > 100) throw new Error("Selecione entre 1 e 100 cliques por vez.");
+  const linksById = {};
+  getAllLinks_(false).forEach(function (link) { linksById[link.id] = link; });
+  const groups = {};
+
+  items.forEach(function (item) {
+    const id = String(item.linkId || "").trim();
+    const link = linksById[id];
+    const rowNumber = Number(item.rowNumber);
+    const timestampMs = Number(item.timestampMs);
+    if (!link || !Number.isInteger(rowNumber) || rowNumber < 2 || !Number.isFinite(timestampMs)) {
+      throw new Error("Um clique selecionado não é válido ou o link não existe mais.");
+    }
+    const tab = link.aba || "Cliques";
+    const key = link.spreadsheetId + "::" + tab;
+    if (!groups[key]) groups[key] = { spreadsheetId: link.spreadsheetId, tab: tab, items: [] };
+    groups[key].items.push({
+      linkId: id, rowNumber: rowNumber, timestampMs: timestampMs,
+      clickId: String(item.clickId || "").trim()
+    });
+  });
+
+  const lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+  try {
+    Object.keys(groups).forEach(function (key) {
+      const group = groups[key];
+      group.sheet = SpreadsheetApp.openById(group.spreadsheetId).getSheetByName(group.tab);
+      if (!group.sheet) throw new Error('A aba "' + group.tab + '" não foi encontrada.');
+      const lastColumn = group.sheet.getLastColumn();
+      const headers = headerMap_(group.sheet.getRange(1, 1, 1, lastColumn).getValues()[0]);
+      ensureHeadersPresent_(headers, ["data_hora", "link_id"]);
+      const lastRow = group.sheet.getLastRow();
+      const rows = {};
+      group.items.forEach(function (item) {
+        if (item.rowNumber > lastRow) throw new Error("A planilha mudou. Atualize os gráficos e tente novamente.");
+        if (!rows[item.rowNumber]) rows[item.rowNumber] =
+          group.sheet.getRange(item.rowNumber, 1, 1, lastColumn).getValues()[0];
+        const row = rows[item.rowNumber];
+        if (String(row[headers.link_id] || "").trim() !== item.linkId ||
+            new Date(row[headers.data_hora]).getTime() !== item.timestampMs ||
+            (item.clickId && headers.click_id !== undefined &&
+              String(row[headers.click_id] || "").trim() !== item.clickId)) {
+          throw new Error("A planilha mudou. Atualize os gráficos e tente novamente.");
+        }
+      });
+      const seen = {};
+      group.items.forEach(function (item) {
+        if (seen[item.rowNumber]) throw new Error("Um clique foi selecionado mais de uma vez.");
+        seen[item.rowNumber] = true;
+      });
+      group.items.sort(function (a, b) { return b.rowNumber - a.rowNumber; });
+    });
+    let deletedCount = 0;
+    Object.keys(groups).forEach(function (key) {
+      groups[key].items.forEach(function (item) {
+        groups[key].sheet.deleteRow(item.rowNumber);
+        deletedCount++;
+      });
+    });
+    const filters = body.filters || {};
+    const days = [7, 30, 90].indexOf(Number(filters.days)) >= 0 ? Number(filters.days) : 30;
+    CacheService.getScriptCache().remove(analyticsCacheKey_(
+      String(filters.campaign || "all"), String(filters.linkId || "all"), days
+    ));
+    return { success: true, deletedCount: deletedCount };
+  } finally {
+    lock.releaseLock();
+  }
 }
 
 
@@ -607,6 +701,54 @@ function createLink_(input) {
     console.error("Cloudflare link sync failed:", syncError && syncError.message || syncError);
   }
   return link;
+}
+
+function updateLink_(id, input) {
+  const sheet = getRegistry_().getSheetByName("Links");
+  if (!sheet || sheet.getLastRow() < 2) throw new Error("Link não encontrado.");
+  const values = sheet.getDataRange().getValues();
+  const headers = headerMap_(values[0]);
+  const rowIndex = values.findIndex(function (row, index) {
+    return index > 0 && String(row[headers.id] || "").trim() === id;
+  });
+  if (rowIndex < 1) throw new Error("Link não encontrado.");
+
+  const oldRow = values[rowIndex];
+  const name = String(input.name || "").trim();
+  const destinationType = String(input.destinationType || "").trim();
+  if (!name) throw new Error("O nome do link é obrigatório.");
+  if (destinationType !== "url" && destinationType !== "whatsapp") throw new Error("Escolha um destino válido.");
+
+  let destinationUrl;
+  let whatsappNumber = "";
+  let whatsappMessage = "";
+  if (destinationType === "whatsapp") {
+    whatsappNumber = String(input.whatsappNumber || "").replace(/\D/g, "");
+    if (whatsappNumber.length < 10) throw new Error("Informe WhatsApp com código do país e DDD.");
+    whatsappMessage = String(input.whatsappMessage || "");
+    destinationUrl = "https://wa.me/" + whatsappNumber + (whatsappMessage ? "?text=" + encodeURIComponent(whatsappMessage) : "");
+  } else {
+    destinationUrl = validateDestination_(input.destinationUrl);
+  }
+
+  const changes = {
+    nome: safeCell_(name), destinoUrl: safeCell_(destinationUrl), destinationType: destinationType,
+    whatsappNumber: whatsappNumber, whatsappMessage: safeCell_(whatsappMessage),
+    source: safeCell_(String(input.source || "").trim()), medium: safeCell_(String(input.medium || "").trim()),
+    content: safeCell_(String(input.content || "").trim()), updatedAt: new Date().toISOString()
+  };
+  const columns = Object.keys(changes).filter(function (header) { return headers[header] !== undefined; });
+  columns.forEach(function (header) { sheet.getRange(rowIndex + 1, headers[header] + 1).setValue(changes[header]); });
+  try {
+    const link = getAllLinks_(false).find(function (item) { return item.id === id; });
+    if (!link) throw new Error("Não consegui reler o link atualizado.");
+    syncCloudflareLinks_([{ id: id, destinationUrl: link.destinationUrl, active: link.status === "active" }]);
+    link.cloudflareSynced = true;
+    return link;
+  } catch (error) {
+    columns.forEach(function (header) { sheet.getRange(rowIndex + 1, headers[header] + 1).setValue(oldRow[headers[header]]); });
+    throw new Error("Falhou a sincronização do link com o Cloudflare; mantive os dados anteriores. " + (error.message || error));
+  }
 }
 
 function syncAllLinksToCloudflare() {

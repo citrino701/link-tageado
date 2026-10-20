@@ -1,1 +1,50 @@
 @import "tailwindcss";
+
+/* Theme tokens override Tailwind utility colors while preserving the existing layout. */
+[data-theme="paper"] {
+  --color-slate-950: #f5f1e8;
+  --color-slate-900: #ffffff;
+  --color-slate-850: #fffdf8;
+  --color-slate-800: #eee8dc;
+  --color-slate-700: #ddd4c4;
+  --color-slate-600: #c9beab;
+  --color-slate-500: #776f63;
+  --color-slate-400: #655d52;
+  --color-slate-300: #50483e;
+  --color-slate-200: #38332d;
+  --color-slate-100: #27231e;
+  --color-emerald-950: #fff4c7;
+  --color-emerald-600: #c28b00;
+  --color-emerald-500: #d8a500;
+  --color-emerald-400: #a87700;
+  --color-emerald-300: #875f00;
+  --color-teal-500: #d8a500;
+  --color-teal-400: #a87700;
+  --color-blue-400: #2563eb;
+  --color-rose-400: #dc2626;
+}
+[data-theme="violet"] {
+  --color-slate-950: #100d1b;
+  --color-slate-900: #1a1528;
+  --color-slate-850: #211a31;
+  --color-slate-800: #29213c;
+  --color-slate-700: #3a3051;
+  --color-slate-600: #55466f;
+  --color-slate-500: #a095b8;
+  --color-slate-400: #b8afca;
+  --color-slate-300: #d0c9dc;
+  --color-slate-200: #e2ddee;
+  --color-slate-100: #f2eff7;
+  --color-emerald-950: #281d43;
+  --color-emerald-600: #7c3aed;
+  --color-emerald-500: #8b5cf6;
+  --color-emerald-400: #a78bfa;
+  --color-emerald-300: #c4b5fd;
+  --color-teal-500: #0891b2;
+  --color-teal-400: #22d3ee;
+  --color-cyan-500: #0891b2;
+  --color-cyan-400: #22d3ee;
+}
+[data-theme="paper"] [data-metric-number="real"] { color: #2563eb; }
+[data-theme="paper"] [data-metric-number="total"] { color: #dc2626; }
+[data-theme="paper"] [data-metric-number="unique"] { color: #2563eb; }

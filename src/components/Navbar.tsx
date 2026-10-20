@@ -4,9 +4,11 @@ import { Link2, ShieldCheck, FileSpreadsheet } from 'lucide-react';
 interface NavbarProps {
   adminEmail: string;
   onOpenTests: () => void;
+  theme: 'night' | 'paper' | 'violet';
+  onThemeChange: (theme: 'night' | 'paper' | 'violet') => void;
 }
 
-export const Navbar: React.FC<NavbarProps> = ({ adminEmail, onOpenTests }) => {
+export const Navbar: React.FC<NavbarProps> = ({ adminEmail, onOpenTests, theme, onThemeChange }) => {
   return (
     <header className="sticky top-0 z-30 border-b border-slate-800 bg-slate-900/95 backdrop-blur">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-3">
@@ -28,6 +30,10 @@ export const Navbar: React.FC<NavbarProps> = ({ adminEmail, onOpenTests }) => {
         </div>
 
         <div className="flex items-center gap-2.5 shrink-0">
+          <label className="sr-only" htmlFor="hub-theme">Tema de cores</label>
+          <select id="hub-theme" value={theme} onChange={event => onThemeChange(event.target.value as 'night' | 'paper' | 'violet')} className="max-w-36 rounded-lg border border-slate-700 bg-slate-800 px-2 py-1.5 text-xs text-slate-200">
+            <option value="night">Noite esmeralda</option><option value="paper">Off-white e açafrão</option><option value="violet">Violeta e ciano</option>
+          </select>
           <button
             onClick={onOpenTests}
             className="hidden md:flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition"
