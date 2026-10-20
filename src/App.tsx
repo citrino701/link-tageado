@@ -18,6 +18,7 @@ import { ConnectSheetsCard } from './components/ConnectSheetsCard.tsx';
 import { StatsOverview } from './components/StatsOverview.tsx';
 import { CreateLinkModal } from './components/CreateLinkModal.tsx';
 import { LinkCard } from './components/LinkCard.tsx';
+import { EditLinkModal } from './components/EditLinkModal.tsx';
 import { SyncQueueModal } from './components/SyncQueueModal.tsx';
 import { DiagnosticTestsModal } from './components/DiagnosticTestsModal.tsx';
 import { LinkRecord, SyncQueueItem } from './services/store.ts';
@@ -47,6 +48,12 @@ export default function App() {
 
   // Modals
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [editingLink, setEditingLink] = useState<LinkRecord | null>(null);
+  const [theme, setTheme] = useState<'night' | 'paper' | 'violet'>(() => {
+    const saved = localStorage.getItem('hub-theme');
+    return saved === 'paper' || saved === 'violet' ? saved : 'night';
+  });
+  useEffect(() => { localStorage.setItem('hub-theme', theme); }, [theme]);
 
   const [isQueueModalOpen, setIsQueueModalOpen] = useState(false);
   const [isTestsModalOpen, setIsTestsModalOpen] = useState(false);
@@ -211,7 +218,7 @@ export default function App() {
 
   return (
 
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans selection:bg-emerald-500 selection:text-slate-950">
+    <div data-theme={theme} className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans selection:bg-emerald-500 selection:text-slate-950">
       {/* Toast Notification */}
       {toast && (
         <div
@@ -234,6 +241,8 @@ export default function App() {
       <Navbar
         adminEmail={adminEmail}
         onOpenTests={() => setIsTestsModalOpen(true)}
+        theme={theme}
+        onThemeChange={setTheme}
       />
 
       {/* Main Container */}
@@ -494,6 +503,8 @@ export default function App() {
                           link={link}
                           onToggleStatus={handleToggleStatus}
                           onDelete={handleDeleteLink}
+                  onEdit={setEditingLink}
+                          onEdit={setEditingLink}
                         />
                       ))}
                     </div>
@@ -531,6 +542,16 @@ export default function App() {
           showToast(`Link "${newLink.name}" criado com sucesso!`);
         }}
         adminEmail={adminEmail}
+      />
+
+      <EditLinkModal
+        link={editingLink}
+        onClose={() => setEditingLink(null)}
+        onSaved={(updated) => {
+          setLinks(current => current.map(link => link.id === updated.id ? updated : link));
+          setEditingLink(null);
+          showToast(`Link \"${updated.name}\" atualizado.`);
+        }}
       />
 
       <SyncQueueModal
