@@ -626,7 +626,6 @@ export default function App() {
               onEdit={setEditingLink}
             />
           )}
-          )}
         </section>
 
         </>}
