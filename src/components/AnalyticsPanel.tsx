@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { BarChart3, Clock3, MousePointerClick, RefreshCw, TrendingUp } from 'lucide-react';
+import { BarChart3, Clock3, MousePointerClick, RefreshCw, TrendingUp, Trash2 } from 'lucide-react';
 import { LinkRecord } from '../services/store.ts';
 
 type AnalyticsData = {
@@ -10,6 +10,7 @@ type AnalyticsData = {
   daily: Array<{ date: string; label: string; clicks: number }>;
   hourly: Array<{ hour: number; clicks: number }>;
   topLinks: Array<{ id: string; name: string; clicks: number }>;
+  clickRecords: Array<{ rowNumber: number; linkId: string; linkName: string; campaign: string; source: string; clickId: string; timestampMs: number; timestamp: string; isBot: boolean }>;
 };
 
 type Props = { links: LinkRecord[]; campaigns: string[] };
@@ -23,6 +24,9 @@ export function AnalyticsPanel({ links, campaigns }: Props) {
   const [data, setData] = useState<AnalyticsData | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [selectedClicks, setSelectedClicks] = useState<string[]>([]);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteMessage, setDeleteMessage] = useState('');
 
   const campaignLinks = useMemo(
     () => links.filter(link => campaign === 'all' || link.campaign === campaign),
@@ -59,6 +63,21 @@ export function AnalyticsPanel({ links, campaigns }: Props) {
   const maxDaily = Math.max(1, ...(data?.daily.map(item => item.clicks) || [0]));
   const maxHourly = Math.max(1, ...(data?.hourly.map(item => item.clicks) || [0]));
   const maxLink = Math.max(1, ...(data?.topLinks.map(item => item.clicks) || [0]));
+  const clickKey = (item: AnalyticsData['clickRecords'][number]) => `${item.linkId}|${item.rowNumber}|${item.timestampMs}|${item.clickId}`;
+  const deleteSelected = async () => {
+    const items = (data?.clickRecords || []).filter(item => selectedClicks.includes(clickKey(item)));
+    if (!items.length) return;
+    if (!window.confirm(`Apagar ${items.length} registro(s) de clique das planilhas? Essa ação não pode ser desfeita.`)) return;
+    setDeleting(true); setDeleteMessage('');
+    try {
+      const response = await fetch('/api/admin/clicks/delete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ items: items.map(({ linkId, rowNumber, timestampMs, clickId }) => ({ linkId, rowNumber, timestampMs, clickId })) }) });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result?.error || 'Não foi possível apagar os cliques.');
+      setSelectedClicks([]); setDeleteMessage(`${result.deletedCount || items.length} clique(s) apagado(s).`);
+      await loadAnalytics();
+    } catch (err: any) { setError(err?.message || 'Erro ao apagar cliques.'); }
+    finally { setDeleting(false); }
+  };
 
   return (
     <section className="space-y-5" aria-label="Gráficos de cliques">
@@ -137,6 +156,20 @@ export function AnalyticsPanel({ links, campaigns }: Props) {
                 <span className="w-12 text-right tabular-nums text-slate-400">{item.clicks}</span>
               </div>) : <p className="text-xs text-slate-500">Sem cliques no período.</p>}
             </div>
+          <div className={cardClass}>
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+              <div><h2 className="text-sm font-semibold text-slate-100">Registros recentes de clique</h2><p className="mt-1 text-xs text-slate-400">Até 100 registros no período selecionado. A exclusão remove a linha da planilha.</p></div>
+              <button type="button" onClick={() => void deleteSelected()} disabled={!selectedClicks.length || deleting} className="inline-flex items-center gap-2 rounded-lg border border-rose-500/40 bg-rose-950/30 px-3 py-2 text-xs font-semibold text-rose-300 disabled:opacity-40"><Trash2 className="h-4 w-4" />{deleting ? 'Apagando…' : `Apagar selecionados (${selectedClicks.length})`}</button>
+            </div>
+            {deleteMessage && <p role="status" className="mb-3 text-xs text-emerald-400">{deleteMessage}</p>}
+            <div className="max-h-[28rem] overflow-auto rounded-lg border border-slate-800">
+              <table className="w-full min-w-[720px] text-left text-xs">
+                <thead className="sticky top-0 bg-slate-800 text-slate-300"><tr><th className="p-2"><input aria-label="Selecionar todos os registros visíveis" type="checkbox" checked={Boolean(data.clickRecords.length) && selectedClicks.length === data.clickRecords.length} onChange={event => setSelectedClicks(event.target.checked ? data.clickRecords.map(clickKey) : [])} /></th><th className="p-2">Data e hora</th><th className="p-2">Campanha / link</th><th className="p-2">Origem</th><th className="p-2">Tipo</th></tr></thead>
+                <tbody>{data.clickRecords.map(item => <tr key={clickKey(item)} className="border-t border-slate-800 text-slate-300"><td className="p-2"><input aria-label={`Selecionar clique de ${item.linkName} em ${item.timestamp}`} type="checkbox" checked={selectedClicks.includes(clickKey(item))} onChange={event => setSelectedClicks(current => event.target.checked ? [...current, clickKey(item)] : current.filter(key => key !== clickKey(item)))} /></td><td className="whitespace-nowrap p-2">{item.timestamp}</td><td className="p-2"><span className="block font-medium text-slate-200">{item.linkName}</span><span className="text-slate-500">{item.campaign}</span></td><td className="p-2">{item.source || 'Direto'}</td><td className="p-2">{item.isBot ? 'Bot / prévia' : 'Pessoa'}</td></tr>)}</tbody>
+              </table>
+              {!data.clickRecords.length && <p className="p-5 text-center text-xs text-slate-500">Nenhum registro recente neste período.</p>}
+            </div>
+          </div>
           </div>
         </>
       )}
