@@ -35,3 +35,28 @@ test('same visitor repeated clicks count as one unique, bots are excluded, Whats
   assert.equal(stats.bots, 1);
   assert.equal(stats.unique, 2);
 });
+
+
+test('different browser IDs stay distinct even with the same shared-network browser signature', () => {
+  const sameBrowser = 'Mozilla/5.0 Chrome/130 Mobile Safari/537.36';
+  const context = statsFixture([
+    [new Date(), 'link1', sameBrowser, 'browser-device-a', false],
+    [new Date(), 'link1', sameBrowser, 'browser-device-b', false]
+  ]);
+  const stats = context.getClickStats_([{
+    id: 'link1', spreadsheetId: 'sheet1', aba: 'Cliques'
+  }]).link1;
+  assert.equal(stats.unique, 2);
+});
+
+
+test('legacy IP-derived IDs are excluded from browser-unique counts', () => {
+  const context = statsFixture([
+    [new Date(), 'link1', 'Mozilla/5.0 Chrome/130 Safari/537.36', 'edge_' + 'a'.repeat(64), false]
+  ]);
+  const stats = context.getClickStats_([{
+    id: 'link1', spreadsheetId: 'sheet1', aba: 'Cliques'
+  }]).link1;
+  assert.equal(stats.total, 1);
+  assert.equal(stats.unique, 0);
+});

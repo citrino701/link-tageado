@@ -1,5 +1,6 @@
 const TRACKED_PARAMS = [
   "id", "origem", "utm_source", "utm_medium", "utm_campaign",
+  "bot_hint",
   "utm_content", "utm_term", "ref", "ua", "lang", "tz",
   "tzoffset", "visitor_id", "click_id"
 ];
@@ -11,6 +12,31 @@ function cookieValue(request, name) {
   try { return decodeURIComponent(match[1]); } catch (_) { return ""; }
 }
 
+function classifyBotRequest(request) {
+  const method = String(request.method || "GET").toUpperCase();
+  if (method === "HEAD") return "http-head";
+
+  const purpose = [
+    request.headers.get("purpose") || "",
+    request.headers.get("sec-purpose") || "",
+    request.headers.get("x-purpose") || ""
+  ].join(" ").toLowerCase();
+  if (/prefetch|prerender|preview/.test(purpose)) return "prefetch";
+
+  const userAgent = request.headers.get("user-agent") || "";
+  if (/bot|crawler|spider|preview|fetcher|scraper|facebookexternalhit|facebot|facebookbot|meta-externalagent|meta-externalfetcher|meta-webindexer|twitterbot|linkedinbot|slackbot|discordbot|telegrambot|pinterestbot|bingpreview|googlebot|headlesschrome|phantomjs|puppeteer|playwright/i.test(userAgent)) {
+    return "known-crawler";
+  }
+
+  const fetchMode = String(request.headers.get("sec-fetch-mode") || "").toLowerCase();
+  const fetchDestination = String(request.headers.get("sec-fetch-dest") || "").toLowerCase();
+  if (fetchDestination && fetchDestination !== "document" && fetchMode !== "navigate") {
+    return "non-navigation-fetch";
+  }
+
+  return "";
+}
+
 function buildTrackingUrl(scriptUrl, request, linkId, visitorId, clickId) {
   const endpoint = new URL(scriptUrl);
   const incoming = new URL(request.url);
@@ -19,6 +45,9 @@ function buildTrackingUrl(scriptUrl, request, linkId, visitorId, clickId) {
     if (value !== null) endpoint.searchParams.set(key, value.slice(0, 1000));
   });
   endpoint.searchParams.set("id", linkId);
+  const botHint = classifyBotRequest(request);
+  if (botHint) endpoint.searchParams.set("bot_hint", botHint);
+  else endpoint.searchParams.delete("bot_hint");
   if (!endpoint.searchParams.get("origem") && endpoint.searchParams.get("utm_source")) {
     endpoint.searchParams.set("origem", endpoint.searchParams.get("utm_source"));
   }
@@ -52,29 +81,23 @@ async function logClick(scriptUrl, request, linkId, visitorId, clickId) {
   }
 }
 
-async function stableVisitorId(request) {
+function existingVisitorId(request) {
   const saved = cookieValue(request, "hub_link_visitor_id");
-  if (saved) return saved;
+  if (!/^[A-Za-z0-9_-]{8,120}$/.test(saved)) return "";
+  // Discard IDs from the former IP+user-agent hash. They can represent several
+  // devices behind one router and must not be reused as browser identities.
+  if (/^edge_[a-f0-9]{64}$/i.test(saved)) return "";
+  return saved;
+}
 
-  // Use a short-lived browser cookie as the primary identifier. If cookies are
-  // blocked, derive a pseudonymous estimate from Cloudflare's client IP and UA;
-  // the raw IP is never sent to Apps Script or stored in Sheets.
-  const ip = request.headers.get("cf-connecting-ip");
-  if (!ip) return crypto.randomUUID();
-  const material = [
-    ip,
-    request.headers.get("user-agent") || "",
-    request.headers.get("accept-language") || "",
-    new URL(request.url).hostname
-  ].join("\n");
-  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(material));
-  const hex = Array.from(new Uint8Array(digest)).map(byte => byte.toString(16).padStart(2, "0")).join("");
-  return "edge_" + hex;
+function visitorIdForRequest(request) {
+  // A random first-party browser ID keeps devices on shared Wi-Fi separate.
+  return existingVisitorId(request) || crypto.randomUUID();
 }
 
 async function fallbackRedirect(scriptUrl, request, linkId) {
-  const previousVisitorId = cookieValue(request, "hub_link_visitor_id");
-  const visitorId = await stableVisitorId(request);
+  const previousVisitorId = existingVisitorId(request);
+  const visitorId = visitorIdForRequest(request);
   const clickId = crypto.randomUUID();
   try {
     const response = await fetch(buildTrackingUrl(scriptUrl, request, linkId, visitorId, clickId), {
@@ -155,7 +178,7 @@ export async function onRequest(context) {
     });
   }
 
-  const visitorId = await stableVisitorId(request);
+  const visitorId = visitorIdForRequest(request);
   const clickId = crypto.randomUUID();
   context.waitUntil(
     logClick(scriptUrl.toString(), request, id, visitorId, clickId)
@@ -168,7 +191,7 @@ export async function onRequest(context) {
     "location": destination.toString(),
     "cache-control": "no-store"
   });
-  if (!cookieValue(request, "hub_link_visitor_id")) {
+  if (!existingVisitorId(request)) {
     headers.append(
       "set-cookie",
       "hub_link_visitor_id=" + encodeURIComponent(visitorId) + "; Path=/; Max-Age=31536000; Secure; SameSite=Lax"
