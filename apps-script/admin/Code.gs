@@ -1,4 +1,5 @@
 const ADMIN_DEFAULT_EMAIL = "hugoviajante@gmail.com";
+const ADDITIONAL_ADMIN_EMAILS = ["viniciusnunes293@gmail.com"];
 const REGISTRY_PROPERTY = "TRACKER_REGISTRY_ID";
 const ADMIN_EMAIL_PROPERTY = "ADMIN_EMAIL";
 const PUBLIC_LINK_BASE_PROPERTY = "PUBLIC_LINK_BASE_URL";
@@ -102,6 +103,13 @@ function apiRequest(method, requestPath, rawBody) {
     if (verb === "POST" && path === "/api/admin/links") {
       return response_(201, { success: true, link: createLink_(body) });
     }
+    const updateMatch = path.match(/^\\/api\\/admin\\/links\\/([^/]+)$/);
+    if (verb === "PUT" && updateMatch) {
+      return response_(200, { success: true, link: updateLink_(decodeURIComponent(updateMatch[1]), body) });
+    }
+    if (verb === "POST" && path === "/api/admin/clicks/delete") {
+      return response_(200, deleteClicks_(body));
+    }
     if (verb === "POST" && path === "/api/admin/queue/retry") {
       return response_(200, retryFailures_());
     }
@@ -146,13 +154,12 @@ function include(filename) {
 
 function assertAdmin_() {
   const activeEmail = String(Session.getActiveUser().getEmail() || "").trim().toLowerCase();
-  const configuredEmail = String(
-    PropertiesService.getScriptProperties().getProperty(ADMIN_EMAIL_PROPERTY) ||
-    ADMIN_DEFAULT_EMAIL
-  ).trim().toLowerCase();
-
-  if (!activeEmail || activeEmail !== configuredEmail) {
-    const error = new Error("Entre com a conta autorizada: " + configuredEmail + ".");
+  const configuredEmails = String(
+    PropertiesService.getScriptProperties().getProperty(ADMIN_EMAIL_PROPERTY) || ""
+  ).split(/[;,\\s]+/).map(function (email) { return email.trim().toLowerCase(); }).filter(Boolean);
+  const allowedEmails = [ADMIN_DEFAULT_EMAIL].concat(ADDITIONAL_ADMIN_EMAILS).concat(configuredEmails);
+  if (!activeEmail || allowedEmails.indexOf(activeEmail) < 0) {
+    const error = new Error("Esta conta Google não está autorizada a acessar o Hub.");
     error.statusCode = 403;
     throw error;
   }
@@ -607,6 +614,54 @@ function createLink_(input) {
     console.error("Cloudflare link sync failed:", syncError && syncError.message || syncError);
   }
   return link;
+}
+
+function updateLink_(id, input) {
+  const sheet = getRegistry_().getSheetByName("Links");
+  if (!sheet || sheet.getLastRow() < 2) throw new Error("Link não encontrado.");
+  const values = sheet.getDataRange().getValues();
+  const headers = headerMap_(values[0]);
+  const rowIndex = values.findIndex(function (row, index) {
+    return index > 0 && String(row[headers.id] || "").trim() === id;
+  });
+  if (rowIndex < 1) throw new Error("Link não encontrado.");
+
+  const oldRow = values[rowIndex];
+  const name = String(input.name || "").trim();
+  const destinationType = String(input.destinationType || "").trim();
+  if (!name) throw new Error("O nome do link é obrigatório.");
+  if (destinationType !== "url" && destinationType !== "whatsapp") throw new Error("Escolha um destino válido.");
+
+  let destinationUrl;
+  let whatsappNumber = "";
+  let whatsappMessage = "";
+  if (destinationType === "whatsapp") {
+    whatsappNumber = String(input.whatsappNumber || "").replace(/\\D/g, "");
+    if (whatsappNumber.length < 10) throw new Error("Informe WhatsApp com código do país e DDD.");
+    whatsappMessage = String(input.whatsappMessage || "");
+    destinationUrl = "https://wa.me/" + whatsappNumber + (whatsappMessage ? "?text=" + encodeURIComponent(whatsappMessage) : "");
+  } else {
+    destinationUrl = validateDestination_(input.destinationUrl);
+  }
+
+  const changes = {
+    nome: safeCell_(name), destinoUrl: safeCell_(destinationUrl), destinationType: destinationType,
+    whatsappNumber: whatsappNumber, whatsappMessage: safeCell_(whatsappMessage),
+    source: safeCell_(String(input.source || "").trim()), medium: safeCell_(String(input.medium || "").trim()),
+    content: safeCell_(String(input.content || "").trim()), updatedAt: new Date().toISOString()
+  };
+  const columns = Object.keys(changes).filter(function (header) { return headers[header] !== undefined; });
+  columns.forEach(function (header) { sheet.getRange(rowIndex + 1, headers[header] + 1).setValue(changes[header]); });
+  try {
+    const link = getAllLinks_(false).find(function (item) { return item.id === id; });
+    if (!link) throw new Error("Não consegui reler o link atualizado.");
+    syncCloudflareLinks_([{ id: id, destinationUrl: link.destinationUrl, active: link.status === "active" }]);
+    link.cloudflareSynced = true;
+    return link;
+  } catch (error) {
+    columns.forEach(function (header) { sheet.getRange(rowIndex + 1, headers[header] + 1).setValue(oldRow[headers[header]]); });
+    throw new Error("Falhou a sincronização do link com o Cloudflare; mantive os dados anteriores. " + (error.message || error));
+  }
 }
 
 function syncAllLinksToCloudflare() {
