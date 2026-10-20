@@ -39,7 +39,7 @@ Em **Project Settings → Script Properties**, adicione:
 | `ADMIN_EMAIL` | `hugoviajante@gmail.com` |
 | `PUBLIC_LINK_BASE_URL` | `https://citrino701.github.io/link-tageado/` |
 
-No editor, selecione `setupAdmin` e clique **Run** uma vez. Autorize o Apps Script a acessar suas planilhas.
+No editor, selecione `setupAdmin` e clique **Run** uma vez. Autorize o Apps Script a acessar suas planilhas e fazer solicitações externas.
 
 Depois, publique em **Deploy → New deployment → Web app**:
 
@@ -61,6 +61,7 @@ Não é necessário dar ao Actions permissão geral de escrita no conteúdo do r
 3. Copie o link público gerado e abra em uma janela anônima.
 4. Confirme que ele redireciona ao destino e cria uma linha em `Cliques`.
 5. Confira os cliques, o status do link e a fila de falhas no painel.
+6. Use **Sincronizar** no cabeçalho para enviar ao KV os links já cadastrados. Links criados ou editados depois disso sincronizam automaticamente.
 
 Os visitantes não precisam fazer login. Somente a implantação administrativa deve usar **Only myself**; a implantação pública de rastreamento precisa continuar aberta.
 
@@ -105,3 +106,12 @@ versão do script administrativo. A abertura do link público continua aguardand
 o registro do clique; a latência real depende do Apps Script e deve ser medida
 após a publicação. Não há promessa de redirecionamento instantâneo.
 
+
+
+## Sincronização, exclusão e identificação de bots
+
+O botão **Sincronizar** no painel administrativo chama o Apps Script para atualizar os links existentes no KV do Cloudflare. Links novos, editados, ativados/desativados e excluídos continuam sendo sincronizados automaticamente. A autorização requer o escopo `script.external_request` no manifesto e as propriedades `CLOUDFLARE_MANAGE_URL` e `CLOUDFLARE_SYNC_TOKEN`.
+
+Ao excluir um link, a linha sai da aba central `Links` e a chave correspondente é removida do KV. A linha completa é guardada na aba `Links_Excluidos` para permitir **Desfazer** no aviso temporário do painel. O histórico de cliques da planilha da campanha é mantido.
+
+A coluna `suspeito_bot` é uma estimativa por sinais observáveis, como user-agent de crawlers conhecidos, requisições `HEAD` e pedidos explícitos de prefetch/preview. Navegação normal no navegador interno do Instagram não é marcada como bot apenas por usar Instagram no user-agent. Nenhuma heurística consegue identificar todos os robôs ou separar com certeza uma pessoa de um clique automatizado: alguns bots imitam navegadores, e alguns previews não se identificam.

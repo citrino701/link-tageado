@@ -186,7 +186,7 @@ function appendClick_(config, params) {
     fuso_horario: safeCell_(params.tz || ""),
     offset_fuso_minutos: safeCell_(params.tzoffset || ""),
     visitor_id: safeCell_(params.visitor_id || ""),
-    suspeito_bot: isBot_(userAgent),
+    suspeito_bot: isBot_(userAgent, params.bot_hint),
     click_id: safeCell_(params.click_id || "")
   };
   const row = headers.map(function (header) {
@@ -394,9 +394,11 @@ function safeCell_(value) {
   return text;
 }
 
-function isBot_(userAgent) {
+function isBot_(userAgent, botHint) {
   const ua = String(userAgent || "");
-  if (/bot|crawler|spider|preview|facebookexternalhit|telegrambot/i.test(ua)) return true;
+  const hint = String(botHint || "").toLowerCase();
+  if (["known-crawler", "http-head", "prefetch", "non-navigation-fetch"].indexOf(hint) >= 0) return true;
+  if (/bot|crawler|spider|preview|fetcher|scraper|facebookexternalhit|facebot|facebookbot|meta-externalagent|meta-externalfetcher|meta-webindexer|twitterbot|linkedinbot|slackbot|discordbot|telegrambot|pinterestbot|bingpreview|googlebot|headlesschrome|phantomjs|puppeteer|playwright/i.test(ua)) return true;
   // "WhatsApp" also appears in real in-app browser UAs. Only treat it as a bot
   // when it lacks the normal browser/WebView signatures.
   const hasBrowser = /mozilla|applewebkit|chrome|safari|firefox|edg|opr/i.test(ua);

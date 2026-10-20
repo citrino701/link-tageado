@@ -23,7 +23,7 @@ No projeto Apps Script administrativo, adicione estas propriedades do script:
 - `CLOUDFLARE_MANAGE_URL` = `https://linkshorter.pages.dev/api/manage-links`
 - `CLOUDFLARE_SYNC_TOKEN` = o mesmo valor configurado como secret `SYNC_TOKEN` no Cloudflare
 
-Depois de atualizar e publicar uma nova versão do `Code.gs`, rode uma vez `syncAllLinksToCloudflare` pelo editor do Apps Script. Isso copia os links já cadastrados para o KV. Links novos, ativados, desativados ou excluídos são sincronizados pelo painel.
+Depois de atualizar e publicar uma nova versão do `Code.gs`, use **Sincronizar** no cabeçalho do painel para copiar ao KV todos os links já cadastrados. Também é possível rodar `syncAllLinksToCloudflare` pelo editor do Apps Script. Links novos, editados, ativados, desativados ou excluídos são sincronizados automaticamente.
 
 ## Teste
 

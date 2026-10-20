@@ -33,6 +33,7 @@ export default function App() {
   const [syncQueue, setSyncQueue] = useState<SyncQueueItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isCatalogLoading, setIsCatalogLoading] = useState(true);
+  const [isCloudflareSyncing, setIsCloudflareSyncing] = useState(false);
   const [catalogError, setCatalogError] = useState('');
   const [metricsReady, setMetricsReady] = useState(false);
   const [queueReady, setQueueReady] = useState(false);
@@ -49,9 +50,9 @@ export default function App() {
   // Modals
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [editingLink, setEditingLink] = useState<LinkRecord | null>(null);
-  const [theme, setTheme] = useState<'night' | 'paper' | 'violet'>(() => {
+  const [theme, setTheme] = useState<'night' | 'paper' | 'violet' | 'ocean'>(() => {
     const saved = localStorage.getItem('hub-theme');
-    return saved === 'paper' || saved === 'violet' ? saved : 'night';
+    return saved === 'paper' || saved === 'violet' || saved === 'ocean' ? saved : 'night';
   });
   useEffect(() => { localStorage.setItem('hub-theme', theme); }, [theme]);
 
@@ -60,11 +61,24 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<'links' | 'analytics'>('links');
 
   // Toast
-  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+  const [toast, setToast] = useState<{
+    message: string;
+    type: 'success' | 'error';
+    action?: { label: string; onClick: () => void | Promise<void> };
+  } | null>(null);
+  const toastTimeout = useRef<number | null>(null);
 
-  const showToast = (message: string, type: 'success' | 'error' = 'success') => {
-    setToast({ message, type });
-    setTimeout(() => setToast(null), 4000);
+  const showToast = (
+    message: string,
+    type: 'success' | 'error' = 'success',
+    action?: { label: string; onClick: () => void | Promise<void> }
+  ) => {
+    if (toastTimeout.current !== null) window.clearTimeout(toastTimeout.current);
+    setToast({ message, type, action });
+    toastTimeout.current = window.setTimeout(() => {
+      setToast(null);
+      toastTimeout.current = null;
+    }, action ? 12000 : 4000);
   };
 
   // Campaigns use only the registry; click history loads after the catalog is visible.
@@ -144,21 +158,56 @@ export default function App() {
     }
   };
 
-  // Delete link
+  // Delete the registry row and KV entry; click history stays in the campaign sheet.
   const handleDeleteLink = async (id: string) => {
     try {
       const res = await fetch(`/api/admin/links/${id}`, {
         method: 'DELETE',
-        headers: {
-          'x-admin-email': adminEmail,
-        },
+        headers: { 'x-admin-email': adminEmail },
       });
-      if (res.ok) {
-        setLinks((prev) => prev.filter((l) => l.id !== id));
-        showToast('Link removido com sucesso. Os dados na planilha foram mantidos.');
-      }
-    } catch {
-      showToast('Erro ao excluir link.', 'error');
+      const result = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(result?.error || 'Não foi possível excluir o link.');
+      setLinks((prev) => prev.filter((link) => link.id !== id));
+      showToast('Link removido da aba Links. O histórico de cliques foi preservado.', 'success', {
+        label: 'Desfazer',
+        onClick: () => handleRestoreLink(id),
+      });
+    } catch (error: any) {
+      showToast(error.message || 'Erro ao excluir link.', 'error');
+    }
+  };
+
+  const handleRestoreLink = async (id: string) => {
+    try {
+      const res = await fetch(`/api/admin/links/${id}/restore`, {
+        method: 'POST',
+        headers: { 'x-admin-email': adminEmail },
+      });
+      const result = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(result?.error || 'Não foi possível desfazer a exclusão.');
+      setLinks((prev) => [...prev, result.link].sort((a, b) =>
+        String(b.createdAt || '').localeCompare(String(a.createdAt || ''))
+      ));
+      showToast('Link restaurado na planilha e sincronizado com o Cloudflare.');
+    } catch (error: any) {
+      showToast(error.message || 'Não foi possível desfazer a exclusão.', 'error');
+    }
+  };
+
+  const handleSyncCloudflare = async () => {
+    setIsCloudflareSyncing(true);
+    try {
+      const res = await fetch('/api/admin/cloudflare/sync', {
+        method: 'POST',
+        headers: { 'x-admin-email': adminEmail },
+      });
+      const result = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(result?.error || 'Não foi possível sincronizar os links.');
+      showToast(`${Number(result.synchronized || 0)} link(s) sincronizado(s) com o Cloudflare.`);
+    } catch (error: any) {
+      showToast(error.message || 'Falha ao sincronizar com o Cloudflare.', 'error');
+    } finally {
+      setIsCloudflareSyncing(false);
     }
   };
 
@@ -234,6 +283,21 @@ export default function App() {
             <AlertCircle className="w-4 h-4 text-rose-400" />
           )}
           <span>{toast.message}</span>
+          {toast.action && (
+            <button
+              type="button"
+              onClick={() => {
+                const action = toast.action;
+                if (toastTimeout.current !== null) window.clearTimeout(toastTimeout.current);
+                toastTimeout.current = null;
+                setToast(null);
+                void action?.onClick();
+              }}
+              className="ml-2 rounded-lg border border-current/30 px-2.5 py-1 text-xs font-bold hover:bg-white/10"
+            >
+              {toast.action.label}
+            </button>
+          )}
         </div>
       )}
 
@@ -243,6 +307,8 @@ export default function App() {
         onOpenTests={() => setIsTestsModalOpen(true)}
         theme={theme}
         onThemeChange={setTheme}
+        onSyncCloudflare={handleSyncCloudflare}
+        isCloudflareSyncing={isCloudflareSyncing}
       />
 
       {/* Main Container */}

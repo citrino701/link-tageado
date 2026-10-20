@@ -105,4 +105,8 @@ test('bot detection does not classify a real WhatsApp webview as a bot', () => {
   assert.equal(context.isBot_('WhatsApp/2.26.10'), true);
   assert.equal(context.isBot_('Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Chrome/131.0 Mobile Safari/537.36 WhatsApp/2.26.10'), false);
   assert.equal(context.isBot_('facebookexternalhit/1.1'), true);
+  assert.equal(context.isBot_('Meta-ExternalFetcher/1.1'), true);
+  assert.equal(context.isBot_('Instagram 365.0.0.0.0 Android', 'prefetch'), true);
+  assert.equal(context.isBot_('Instagram 365.0.0.0.0 Android'), false);
+  assert.equal(context.isBot_('Mozilla/5.0 Chrome/130 Safari/537.36', 'non-navigation-fetch'), true);
 });

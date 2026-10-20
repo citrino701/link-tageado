@@ -5,6 +5,8 @@ const ADMIN_EMAIL_PROPERTY = "ADMIN_EMAIL";
 const PUBLIC_LINK_BASE_PROPERTY = "PUBLIC_LINK_BASE_URL";
 const CLOUDFLARE_MANAGE_URL_PROPERTY = "CLOUDFLARE_MANAGE_URL";
 const CLOUDFLARE_SYNC_TOKEN_PROPERTY = "CLOUDFLARE_SYNC_TOKEN";
+const DELETED_LINKS_SHEET_NAME = "Links_Excluidos";
+const DELETED_LINKS_HEADERS = ["deletedAt", "id", "rowJson"];
 const PUBLIC_ASSET_BASE = "https://citrino701.github.io/link-tageado/app";
 
 const REGISTRY_HEADERS = [
@@ -91,6 +93,9 @@ function apiRequest(method, requestPath, rawBody) {
     if (verb === "GET" && path === "/api/admin/links") {
       return response_(200, { links: getAllLinks_() });
     }
+    if (verb === "POST" && path === "/api/admin/cloudflare/sync") {
+      return response_(200, syncAllLinksToCloudflare());
+    }
     if (verb === "POST" && path === "/api/admin/analytics") {
       return response_(200, getAnalytics_(body));
     }
@@ -124,10 +129,17 @@ function apiRequest(method, requestPath, rawBody) {
         response_(404, { error: "Link não encontrado." });
     }
 
+    const restoreMatch = path.match(/^\/api\/admin\/links\/([^/]+)\/restore$/);
+    if (verb === "POST" && restoreMatch) {
+      const link = restoreDeletedLink_(decodeURIComponent(restoreMatch[1]));
+      return link ? response_(200, { success: true, link: link }) :
+        response_(404, { error: "Não encontrei esse link na área de excluídos." });
+    }
+
     const deleteMatch = path.match(/^\/api\/admin\/links\/([^/]+)$/);
     if (verb === "DELETE" && deleteMatch) {
       return deleteLink_(decodeURIComponent(deleteMatch[1]))
-        ? response_(200, { success: true, message: "Link removido. Os registros de cliques foram mantidos." })
+        ? response_(200, { success: true, message: "Link removido da aba Links e do Cloudflare. O histórico de cliques foi preservado." })
         : response_(404, { error: "Link não encontrado." });
     }
 
@@ -777,7 +789,7 @@ function syncCloudflareLinks_(links) {
   if (!links || !links.length) return true;
   const props = PropertiesService.getScriptProperties();
   const token = String(props.getProperty(CLOUDFLARE_SYNC_TOKEN_PROPERTY) || "").trim();
-  if (!token) return false;
+  if (!token) throw new Error("Configure CLOUDFLARE_SYNC_TOKEN antes de sincronizar com o Cloudflare.");
   const url = String(props.getProperty(CLOUDFLARE_MANAGE_URL_PROPERTY) ||
     "https://linkshorter.pages.dev/api/manage-links").trim();
   const response = UrlFetchApp.fetch(url, {
@@ -832,26 +844,120 @@ function updateLinkStatus_(id, status) {
   return null;
 }
 
-function deleteLink_(id) {
-  const sheet = getRegistry_().getSheetByName("Links");
-  if (!sheet || sheet.getLastRow() < 2) return false;
-  const values = sheet.getDataRange().getValues();
-  const headers = headerMap_(values[0]);
-  for (let i = values.length - 1; i > 0; i--) {
-    if (String(values[i][headers.id]).trim() === id) {
-      try {
-        syncCloudflareLinks_([{ id: id, removed: true }]);
-      } catch (syncError) {
-        throw new Error("Não removi o link: falhou a sincronização com o Cloudflare. " +
-          (syncError.message || String(syncError)));
-      }
-      sheet.deleteRow(i + 1);
-      return true;
-    }
+function getDeletedLinksSheet_(registry) {
+  let sheet = registry.getSheetByName(DELETED_LINKS_SHEET_NAME);
+  if (!sheet) sheet = registry.insertSheet(DELETED_LINKS_SHEET_NAME);
+  if (sheet.getLastRow() === 0) {
+    sheet.appendRow(DELETED_LINKS_HEADERS);
+    sheet.setFrozenRows(1);
+    return sheet;
   }
-  return false;
+
+  const headers = sheet.getRange(1, 1, 1, Math.max(sheet.getLastColumn(), 1))
+    .getValues()[0].map(function (value) { return String(value).trim(); });
+  ensureHeadersPresent_(headerMap_(headers), DELETED_LINKS_HEADERS);
+  return sheet;
 }
 
+function deleteLink_(id) {
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    const registry = getRegistry_();
+    const sheet = registry.getSheetByName("Links");
+    if (!sheet || sheet.getLastRow() < 2) return false;
+    const values = sheet.getDataRange().getValues();
+    const headers = headerMap_(values[0]);
+
+    for (let i = values.length - 1; i > 0; i--) {
+      const originalRow = values[i];
+      if (String(value_(originalRow, headers, "id") || "").trim() !== id) continue;
+      const destinationUrl = String(value_(originalRow, headers, "destinoUrl") || "").trim();
+      const wasActive = isActive_(value_(originalRow, headers, "ativo"));
+      const archive = getDeletedLinksSheet_(registry);
+      archive.appendRow([new Date().toISOString(), id, JSON.stringify({
+        headers: values[0],
+        values: originalRow
+      })]);
+      const archiveRow = archive.getLastRow();
+
+      try {
+        const synced = syncCloudflareLinks_([{ id: id, removed: true }]);
+        if (synced !== true) throw new Error("Cloudflare não confirmou a remoção.");
+        sheet.deleteRow(i + 1);
+        return true;
+      } catch (error) {
+        try {
+          syncCloudflareLinks_([{ id: id, destinationUrl: destinationUrl, active: wasActive }]);
+        } catch (rollbackError) {
+          console.error("Could not restore Cloudflare link after failed delete:", rollbackError.message || rollbackError);
+        }
+        try { archive.deleteRow(archiveRow); } catch (ignored) {}
+        throw new Error("Não consegui excluir o link. A linha foi mantida. " +
+          (error.message || String(error)));
+      }
+    }
+    return false;
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function restoreDeletedLink_(id) {
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    const registry = getRegistry_();
+    const linksSheet = registry.getSheetByName("Links");
+    if (!linksSheet) throw new Error('A aba "Links" não existe.');
+    const linksHeaders = ensureRegistrySchema_(linksSheet);
+    const currentRows = linksSheet.getDataRange().getValues();
+    const currentHeaders = headerMap_(currentRows[0]);
+    for (let i = 1; i < currentRows.length; i++) {
+      if (String(value_(currentRows[i], currentHeaders, "id") || "").trim() === id) {
+        throw new Error("Esse link já existe na aba Links.");
+      }
+    }
+
+    const archive = getDeletedLinksSheet_(registry);
+    const values = archive.getDataRange().getValues();
+    const headers = headerMap_(values[0]);
+    for (let i = values.length - 1; i > 0; i--) {
+      if (String(value_(values[i], headers, "id") || "").trim() !== id) continue;
+      const saved = JSON.parse(String(value_(values[i], headers, "rowJson") || "{}"));
+      if (!Array.isArray(saved.headers) || !Array.isArray(saved.values)) {
+        throw new Error("O registro arquivado está incompleto.");
+      }
+      const original = {};
+      saved.headers.forEach(function (header, index) {
+        const name = String(header || "").trim();
+        if (name) original[name] = saved.values[index];
+      });
+      linksSheet.appendRow(headersToRow_(linksHeaders, original));
+      const restoredRow = linksSheet.getLastRow();
+      try {
+        const synced = syncCloudflareLinks_([{
+          id: id,
+          destinationUrl: String(original.destinoUrl || ""),
+          active: isActive_(original.ativo)
+        }]);
+        if (synced !== true) throw new Error("Cloudflare não confirmou a restauração.");
+      } catch (error) {
+        try { linksSheet.deleteRow(restoredRow); } catch (ignored) {}
+        throw new Error("Não consegui restaurar o link no Cloudflare; ele continua arquivado. " +
+          (error.message || String(error)));
+      }
+
+      try { archive.deleteRow(i + 1); } catch (cleanupError) {
+        console.error("Restored link, but could not remove its archive row:", cleanupError.message || cleanupError);
+      }
+      return getAllLinks_(false).find(function (link) { return link.id === id; }) || null;
+    }
+    return null;
+  } finally {
+    lock.releaseLock();
+  }
+}
 function getFailureQueue_() {
   const registry = getRegistry_();
   const sheet = registry.getSheetByName("Falhas");

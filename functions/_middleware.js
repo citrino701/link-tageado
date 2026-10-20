@@ -1,5 +1,6 @@
 const TRACKED_PARAMS = [
   "id", "origem", "utm_source", "utm_medium", "utm_campaign",
+  "bot_hint",
   "utm_content", "utm_term", "ref", "ua", "lang", "tz",
   "tzoffset", "visitor_id", "click_id"
 ];
@@ -11,6 +12,31 @@ function cookieValue(request, name) {
   try { return decodeURIComponent(match[1]); } catch (_) { return ""; }
 }
 
+function classifyBotRequest(request) {
+  const method = String(request.method || "GET").toUpperCase();
+  if (method === "HEAD") return "http-head";
+
+  const purpose = [
+    request.headers.get("purpose") || "",
+    request.headers.get("sec-purpose") || "",
+    request.headers.get("x-purpose") || ""
+  ].join(" ").toLowerCase();
+  if (/prefetch|prerender|preview/.test(purpose)) return "prefetch";
+
+  const userAgent = request.headers.get("user-agent") || "";
+  if (/bot|crawler|spider|preview|fetcher|scraper|facebookexternalhit|facebot|facebookbot|meta-externalagent|meta-externalfetcher|meta-webindexer|twitterbot|linkedinbot|slackbot|discordbot|telegrambot|pinterestbot|bingpreview|googlebot|headlesschrome|phantomjs|puppeteer|playwright/i.test(userAgent)) {
+    return "known-crawler";
+  }
+
+  const fetchMode = String(request.headers.get("sec-fetch-mode") || "").toLowerCase();
+  const fetchDestination = String(request.headers.get("sec-fetch-dest") || "").toLowerCase();
+  if (fetchDestination && fetchDestination !== "document" && fetchMode !== "navigate") {
+    return "non-navigation-fetch";
+  }
+
+  return "";
+}
+
 function buildTrackingUrl(scriptUrl, request, linkId, visitorId, clickId) {
   const endpoint = new URL(scriptUrl);
   const incoming = new URL(request.url);
@@ -19,6 +45,9 @@ function buildTrackingUrl(scriptUrl, request, linkId, visitorId, clickId) {
     if (value !== null) endpoint.searchParams.set(key, value.slice(0, 1000));
   });
   endpoint.searchParams.set("id", linkId);
+  const botHint = classifyBotRequest(request);
+  if (botHint) endpoint.searchParams.set("bot_hint", botHint);
+  else endpoint.searchParams.delete("bot_hint");
   if (!endpoint.searchParams.get("origem") && endpoint.searchParams.get("utm_source")) {
     endpoint.searchParams.set("origem", endpoint.searchParams.get("utm_source"));
   }

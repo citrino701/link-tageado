@@ -234,9 +234,10 @@ export const LinkCard: React.FC<LinkCardProps> = ({ link, onToggleStatus, onDele
           <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 max-w-md w-full shadow-2xl">
             <h5 className="text-base font-bold text-slate-100 mb-2">Excluir link "{link.name}"?</h5>
             <p className="text-xs text-slate-400 mb-4 leading-relaxed">
-              O link será removido da listagem do painel. <br />
+              O registro sairá da aba <strong className="text-slate-200">Links</strong> e o atalho será removido do Cloudflare.
+              <br />
               <strong className="text-slate-200">
-                O histórico de cliques registrado na sua Planilha Google será preservado intacto.
+                Os cliques na planilha da campanha serão mantidos. Você pode desfazer logo após excluir.
               </strong>
             </p>
             <div className="flex justify-end gap-2">
