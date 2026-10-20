@@ -14,7 +14,7 @@ interface SettingsPanelProps {
 
 const themeOptions: Array<{ id: HubTheme; name: string; description: string; colors: string[] }> = [
   { id: 'night', name: 'Noite esmeralda', description: 'Tema escuro original', colors: ['#061512', '#0d2721', '#34d399'] },
-  { id: 'emerald-glass', name: 'Noite esmeralda Glassmorphism', description: 'Vidro translúcido sobre fundo verde profundo', colors: ['#061512', '#155e4a', '#a7f3d0'] },
+  { id: 'emerald-glass', name: 'Noite âmbar Glassmorphism', description: 'Vidro translúcido em fundo preto com laranja e branco', colors: ['#060709', '#ed7626', '#f1eae4'] },
   { id: 'paper', name: 'Off-white e açafrão', description: 'Fundo claro e destaques suaves', colors: ['#f7f5ef', '#ead796', '#3d7458'] },
   { id: 'violet', name: 'Violeta e ciano', description: 'Roxo escuro com detalhes frios', colors: ['#100d1b', '#8b5cf6', '#22d3ee'] },
   { id: 'ocean', name: 'Azul atlântico', description: 'Azul claro e tons oceânicos', colors: ['#e8f1f2', '#1b98e0', '#247ba0'] },
