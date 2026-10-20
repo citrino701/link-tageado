@@ -90,6 +90,9 @@ function apiRequest(method, requestPath, rawBody) {
     if (verb === "GET" && path === "/api/admin/links") {
       return response_(200, { links: getAllLinks_() });
     }
+    if (verb === "POST" && path === "/api/admin/analytics") {
+      return response_(200, getAnalytics_(body));
+    }
     if (verb === "GET" && path === "/api/admin/queue") {
       return response_(200, { queue: getFailureQueue_() });
     }
@@ -357,6 +360,100 @@ function getClickStats_(links) {
   });
   return result;
 }
+
+function getAnalytics_(filters) {
+  const allowedDays = [7, 30, 90];
+  const days = allowedDays.indexOf(Number(filters.days)) >= 0 ? Number(filters.days) : 30;
+  const campaign = String(filters.campaign || "all");
+  const selectedLinkId = String(filters.linkId || "all");
+  const cache = CacheService.getScriptCache();
+  const cacheKey = "hub-analytics-" + Utilities.base64EncodeWebSafe(
+    Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, [campaign, selectedLinkId, days].join("|"))
+  ).slice(0, 32);
+  const cached = cache.get(cacheKey);
+  if (cached) return JSON.parse(cached);
+
+  const links = getAllLinks_(false).filter(function (link) {
+    return (campaign === "all" || link.campaign === campaign) &&
+      (selectedLinkId === "all" || link.id === selectedLinkId);
+  });
+  const tz = Session.getScriptTimeZone() || "America/Sao_Paulo";
+  const today = new Date();
+  const todayKey = Utilities.formatDate(today, tz, "yyyy-MM-dd");
+  const startDate = new Date(today.getTime() - (days - 1) * 24 * 60 * 60 * 1000);
+  const startKey = Utilities.formatDate(startDate, tz, "yyyy-MM-dd");
+  const dailyCounts = {};
+  const hourlyCounts = [];
+  const linkCounts = {};
+  for (let hour = 0; hour < 24; hour++) hourlyCounts.push(0);
+  links.forEach(function (link) { linkCounts[link.id] = 0; });
+
+  const groups = {};
+  links.forEach(function (link) {
+    if (!link.spreadsheetId) return;
+    const tab = link.aba || "Cliques";
+    const key = link.spreadsheetId + "::" + tab;
+    if (!groups[key]) groups[key] = { spreadsheetId: link.spreadsheetId, tab: tab, ids: {} };
+    groups[key].ids[link.id] = true;
+  });
+
+  Object.keys(groups).forEach(function (key) {
+    const group = groups[key];
+    const sheet = SpreadsheetApp.openById(group.spreadsheetId).getSheetByName(group.tab);
+    if (!sheet || sheet.getLastRow() < 2) return;
+    const values = sheet.getDataRange().getValues();
+    const headers = headerMap_(values[0]);
+    if (headers.data_hora === undefined || headers.link_id === undefined) {
+      throw new Error('A aba "' + group.tab + '" precisa das colunas data_hora e link_id para gerar gráficos.');
+    }
+    for (let rowIndex = 1; rowIndex < values.length; rowIndex++) {
+      const row = values[rowIndex];
+      const id = String(row[headers.link_id] || "").trim();
+      if (!group.ids[id]) continue;
+      const browser = headers.navegador === undefined ? "" : String(row[headers.navegador] || "");
+      const markedBot = headers.suspeito_bot !== undefined && isActive_(row[headers.suspeito_bot]);
+      if (markedBot || /bot|crawler|spider|preview|whatsapp|facebookexternalhit|telegrambot/i.test(browser)) continue;
+
+      const rawDate = row[headers.data_hora];
+      const date = rawDate instanceof Date ? rawDate : new Date(rawDate);
+      if (isNaN(date.getTime())) continue;
+      const dateKey = Utilities.formatDate(date, tz, "yyyy-MM-dd");
+      if (dateKey < startKey || dateKey > todayKey) continue;
+      const hour = Number(Utilities.formatDate(date, tz, "H"));
+      dailyCounts[dateKey] = (dailyCounts[dateKey] || 0) + 1;
+      hourlyCounts[hour]++;
+      linkCounts[id] = (linkCounts[id] || 0) + 1;
+    }
+  });
+
+  const daily = [];
+  for (let offset = 0; offset < days; offset++) {
+    const date = new Date(startDate.getTime() + offset * 24 * 60 * 60 * 1000);
+    const dateKey = Utilities.formatDate(date, tz, "yyyy-MM-dd");
+    daily.push({
+      date: dateKey,
+      label: Utilities.formatDate(date, tz, "dd/MM"),
+      clicks: dailyCounts[dateKey] || 0
+    });
+  }
+  const namesById = {};
+  links.forEach(function (link) { namesById[link.id] = link.name; });
+  const topLinks = Object.keys(linkCounts).map(function (id) {
+    return { id: id, name: namesById[id] || id, clicks: linkCounts[id] };
+  }).sort(function (a, b) { return b.clicks - a.clicks; }).slice(0, 10);
+  const result = {
+    campaign: campaign,
+    linkId: selectedLinkId,
+    days: days,
+    totalClicks: daily.reduce(function (sum, item) { return sum + item.clicks; }, 0),
+    daily: daily,
+    hourly: hourlyCounts.map(function (clicks, hour) { return { hour: hour, clicks: clicks }; }),
+    topLinks: topLinks
+  };
+  cache.put(cacheKey, JSON.stringify(result), 120);
+  return result;
+}
+
 
 function validateSheet_(spreadsheetUrl, aba) {
   const spreadsheetId = extractSpreadsheetId_(spreadsheetUrl);
