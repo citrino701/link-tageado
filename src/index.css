@@ -90,40 +90,40 @@
 }
 
 [data-theme="emerald-glass"] {
-  --color-slate-950: rgb(4 19 16 / 0.94);
-  --color-slate-900: rgb(13 39 32 / 0.72);
-  --color-slate-850: rgb(17 48 39 / 0.64);
-  --color-slate-800: rgb(24 59 47 / 0.68);
-  --color-slate-700: rgb(133 182 157 / 0.24);
-  --color-slate-600: rgb(113 162 139 / 0.36);
-  --color-slate-500: #769b88;
-  --color-slate-400: #9eb9aa;
-  --color-slate-300: #c5d9cd;
-  --color-slate-200: #deeee4;
-  --color-slate-100: #f1fbf5;
-  --color-emerald-950: rgb(10 66 48 / 0.72);
-  --color-emerald-600: #087d57;
-  --color-emerald-500: #20b77b;
-  --color-emerald-400: #6ee7b7;
-  --color-emerald-300: #a7f3d0;
-  --color-teal-500: #14b89a;
-  --color-teal-400: #5eead4;
-  --color-cyan-500: #2dd4bf;
-  --color-cyan-400: #7debd7;
-  --color-blue-950: rgb(16 51 43 / 0.7);
-  --color-blue-500: #34d399;
-  --color-blue-400: #a7f3d0;
-  --color-indigo-950: rgb(20 48 40 / 0.7);
-  --color-indigo-500: #34d399;
-  --color-indigo-400: #a7f3d0;
-  --color-indigo-300: #c3f5dd;
-  --color-amber-400: #e5c779;
-  --color-rose-400: #fb8792;
+  --color-slate-950: rgb(5 6 8 / 0.96);
+  --color-slate-900: rgb(18 19 23 / 0.68);
+  --color-slate-850: rgb(25 26 31 / 0.72);
+  --color-slate-800: rgb(34 35 41 / 0.76);
+  --color-slate-700: rgb(255 255 255 / 0.16);
+  --color-slate-600: rgb(255 255 255 / 0.24);
+  --color-slate-500: #a1a2a8;
+  --color-slate-400: #c3c4ca;
+  --color-slate-300: #dedfe3;
+  --color-slate-200: #f1f1f3;
+  --color-slate-100: #ffffff;
+  --color-emerald-950: rgb(63 32 10 / 0.68);
+  --color-emerald-600: #d75c17;
+  --color-emerald-500: #ed7626;
+  --color-emerald-400: #ff994d;
+  --color-emerald-300: #ffd0ad;
+  --color-teal-500: #ec7626;
+  --color-teal-400: #ffb477;
+  --color-cyan-500: #ffae70;
+  --color-cyan-400: #ffe0c7;
+  --color-blue-950: rgb(255 255 255 / 0.08);
+  --color-blue-500: #f2eee9;
+  --color-blue-400: #ffffff;
+  --color-indigo-950: rgb(255 255 255 / 0.08);
+  --color-indigo-500: #ffae70;
+  --color-indigo-400: #ffe0c7;
+  --color-indigo-300: #ffffff;
+  --color-amber-400: #ffad67;
+  --color-rose-400: #ff8792;
+  background-color: #060709;
   background-image:
-    radial-gradient(ellipse at 12% 8%, rgb(26 126 88 / 0.38), transparent 34rem),
-    radial-gradient(ellipse at 88% 16%, rgb(12 88 71 / 0.32), transparent 38rem),
-    radial-gradient(ellipse at 50% 100%, rgb(8 56 45 / 0.28), transparent 44rem),
-    linear-gradient(145deg, #061712 0%, #0b231d 55%, #071914 100%);
+    radial-gradient(ellipse at 15% 90%, rgb(255 255 255 / 0.08), transparent 27rem),
+    radial-gradient(ellipse at 82% 12%, rgb(242 112 31 / 0.22), transparent 34rem),
+    linear-gradient(135deg, #050608 0%, #241108 62%, #f1eae4 145%);
   background-attachment: fixed;
 }
 
@@ -131,28 +131,37 @@
 [data-theme="emerald-glass"] aside > div,
 [data-theme="emerald-glass"] [class*="bg-slate-900"],
 [data-theme="emerald-glass"] [class*="bg-slate-800"] {
-  -webkit-backdrop-filter: blur(18px) saturate(135%);
-  backdrop-filter: blur(18px) saturate(135%);
-  box-shadow: 0 14px 40px rgb(0 10 7 / 0.18);
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  backdrop-filter: blur(24px) saturate(180%);
+  background-image: linear-gradient(135deg, rgb(255 255 255 / 0.13), rgb(255 255 255 / 0.045) 48%, rgb(242 112 31 / 0.07));
+  border-color: rgb(255 255 255 / 0.20);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.22),
+    0 18px 48px rgb(0 0 0 / 0.30);
 }
 
 [data-theme="emerald-glass"] [class*="border-slate-800"],
 [data-theme="emerald-glass"] [class*="border-slate-700"] {
-  border-color: rgb(177 222 198 / 0.15);
+  border-color: rgb(255 255 255 / 0.18);
 }
 
 [data-theme="emerald-glass"] .link-list-icon-glass {
-  background: linear-gradient(145deg, rgb(142 255 202 / 0.18), rgb(18 113 79 / 0.28));
-  border-color: rgb(183 255 216 / 0.34);
-  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.16), 0 8px 24px rgb(5 40 28 / 0.32);
-  -webkit-backdrop-filter: blur(14px);
-  backdrop-filter: blur(14px);
+  background: linear-gradient(145deg, rgb(255 255 255 / 0.20), rgb(255 255 255 / 0.07) 54%, rgb(242 112 31 / 0.20));
+  border-color: rgb(255 255 255 / 0.28);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.42),
+    inset 0 -1px 0 rgb(0 0 0 / 0.12),
+    0 8px 24px rgb(0 0 0 / 0.28);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  backdrop-filter: blur(20px) saturate(180%);
 }
 
 [data-theme="emerald-glass"] .nav-icon-glass {
-  border: 1px solid rgb(183 255 216 / 0.28);
-  background: linear-gradient(145deg, rgb(142 255 202 / 0.16), rgb(18 113 79 / 0.26));
-  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.14), 0 6px 18px rgb(5 40 28 / 0.28);
-  -webkit-backdrop-filter: blur(14px);
-  backdrop-filter: blur(14px);
+  border: 1px solid rgb(255 255 255 / 0.24);
+  background: linear-gradient(145deg, rgb(255 255 255 / 0.18), rgb(255 255 255 / 0.055) 58%, rgb(242 112 31 / 0.16));
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.34),
+    0 6px 18px rgb(0 0 0 / 0.26);
+  -webkit-backdrop-filter: blur(18px) saturate(180%);
+  backdrop-filter: blur(18px) saturate(180%);
 }
