@@ -238,7 +238,6 @@ export default function App() {
 
   // Distinct filter values
   const availableCampaigns = Array.from(new Set(links.map((l) => l.campaign).filter(Boolean)));
-  const listCampaignOptions = Array.from(new Set(links.map((link) => link.campaign || 'Sem Campanha')));
   const availableSources = Array.from(new Set(links.map((l) => l.source).filter(Boolean)));
   const availableSheets = Array.from(new Set(links.map((l) => l.spreadsheetTitle || l.spreadsheetId).filter(Boolean)));
 
@@ -619,7 +618,8 @@ export default function App() {
           ) : (
             <LinkListView
               links={filteredLinks}
-              campaigns={listCampaignOptions}
+              allLinks={links}
+              campaigns={Array.from(new Set(filteredLinks.map((link) => link.campaign || 'Sem Campanha')))}
               metricsReady={metricsReady}
               onToggleStatus={handleToggleStatus}
               onDelete={handleDeleteLink}
