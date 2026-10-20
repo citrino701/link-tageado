@@ -549,13 +549,13 @@ export default function App() {
                       {/* Métricas da Campanha */}
                       <div className="flex flex-wrap items-center gap-2 text-xs">
                         <span className="px-2.5 py-1 rounded-lg bg-slate-950/70 border border-slate-800 text-slate-300 text-[11px]">
-                          Cliques Reais: <strong className="text-emerald-400 font-semibold">{metricsReady ? groupRealClicks : '—'}</strong>
+                          Humanos (est.): <strong className="text-emerald-400 font-semibold">{metricsReady ? groupRealClicks : '—'}</strong>
                         </span>
                         <span className="px-2.5 py-1 rounded-lg bg-slate-950/70 border border-slate-800 text-slate-300 text-[11px]">
                           Total: <strong className="text-slate-100 font-semibold">{metricsReady ? groupTotalClicks : '—'}</strong>
                         </span>
                         <span className="px-2.5 py-1 rounded-lg bg-slate-950/70 border border-slate-800 text-slate-300 text-[11px]">
-                          Visitantes Únicos: <strong className="text-teal-400 font-semibold">{metricsReady ? groupUniqueVisitors : '—'}</strong>
+                          Navegadores por link: <strong className="text-teal-400 font-semibold">{metricsReady ? groupUniqueVisitors : '—'}</strong>
                         </span>
                       </div>
                     </div>

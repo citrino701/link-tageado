@@ -33,3 +33,8 @@ Depois de atualizar e publicar uma nova versão do `Code.gs`, use **Sincronizar*
 4. Crie um link de teste no painel, abra-o e confirme o destino e o registro na planilha.
 
 No plano gratuito, Workers permite até 100 mil requisições por dia, compartilhadas com outros Workers e Pages Functions da conta; KV inclui 100 mil leituras e 1.000 gravações por dia. Cada clique sincronizado consome uma requisição Worker e uma leitura KV; cadastrar, alterar status ou excluir link consome uma gravação KV. Isso não é um teto mensal de 500 cliques. As cotas e a capacidade do Apps Script/Sheets continuam independentes.
+
+
+## Link completo para plataformas que recusam o domínio curto
+
+No cartão do link, abra o menu ao lado de **Copiar** e escolha **Copiar link completo**. Essa versão usa `citrino701.github.io/link-tageado/` e inclui os parâmetros UTM registrados para a campanha. Ela passa pela página ponte do GitHub Pages e pelo Apps Script; não usa o domínio `pages.dev`, mas pode ser mais lenta. Se uma plataforma bloquear qualquer URL que redireciona, não há garantia de que esse formato será aceito.

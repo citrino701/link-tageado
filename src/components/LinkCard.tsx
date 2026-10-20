@@ -8,6 +8,7 @@ import {
   Trash2,
   Pencil,
   CheckCircle2,
+  ChevronDown,
   MessageCircle,
   Globe,
   Bot,
@@ -27,13 +28,16 @@ interface LinkCardProps {
 
 export const LinkCard: React.FC<LinkCardProps> = ({ link, onToggleStatus, onDelete, onEdit, metricsReady = true }) => {
   const [copied, setCopied] = useState(false);
+  const [showLinkFormatMenu, setShowLinkFormatMenu] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
-  const fullShortUrl = buildPublicLink(link);
+  const fullShortUrl = buildPublicLink(link, 'short');
+  const fullLongUrl = buildPublicLink(link, 'long');
 
-  const handleCopy = () => {
-    navigator.clipboard.writeText(fullShortUrl);
+  const handleCopy = (url: string) => {
+    navigator.clipboard.writeText(url);
     setCopied(true);
+    setShowLinkFormatMenu(false);
     setTimeout(() => setCopied(false), 2000);
   };
 
@@ -107,31 +111,59 @@ export const LinkCard: React.FC<LinkCardProps> = ({ link, onToggleStatus, onDele
           </p>
         )}
 
-        {/* Short Link Display */}
+        {/* Short link with a full-length GitHub Pages alternative */}
         <div className="mt-4 bg-slate-950/70 border border-slate-800 rounded-xl p-2.5 flex items-center justify-between gap-2">
           <div className="flex items-center gap-2 overflow-hidden">
             <Link2 className="w-4 h-4 text-emerald-400 shrink-0" />
             <span title={fullShortUrl} className="font-mono text-xs font-semibold text-emerald-400 truncate">
-              {displayPublicLink(link)}
+              {displayPublicLink(link, 'short')}
             </span>
           </div>
-          <button
-            onClick={handleCopy}
-            className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium transition shrink-0"
-            title="Copiar link rastreável"
-          >
-            {copied ? (
-              <>
-                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-                <span className="text-emerald-400">Copiado</span>
-              </>
-            ) : (
-              <>
-                <Copy className="w-3.5 h-3.5" />
-                <span>Copiar</span>
-              </>
+          <div className="relative flex shrink-0">
+            <button
+              type="button"
+              onClick={() => handleCopy(fullShortUrl)}
+              className="flex items-center gap-1 px-2.5 py-1 rounded-l-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium transition"
+              title="Copiar link curto do Cloudflare"
+            >
+              {copied ? (
+                <>
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                  <span className="text-emerald-400">Copiado</span>
+                </>
+              ) : (
+                <>
+                  <Copy className="w-3.5 h-3.5" />
+                  <span>Copiar</span>
+                </>
+              )}
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowLinkFormatMenu((open) => !open)}
+              className="rounded-r-lg border-l border-slate-700 bg-slate-800 px-1.5 text-slate-300 hover:bg-slate-700"
+              aria-label="Escolher outro formato de link"
+              aria-haspopup="menu"
+              aria-expanded={showLinkFormatMenu}
+              title="Outros formatos de link"
+            >
+              <ChevronDown className="h-3.5 w-3.5" />
+            </button>
+            {showLinkFormatMenu && (
+              <div role="menu" className="absolute right-0 top-full z-20 mt-2 w-64 rounded-xl border border-slate-700 bg-slate-900 p-1 shadow-xl">
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => handleCopy(fullLongUrl)}
+                  className="w-full rounded-lg px-3 py-2 text-left hover:bg-slate-800"
+                  title={fullLongUrl}
+                >
+                  <span className="block text-xs font-semibold text-slate-100">Copiar link completo</span>
+                  <span className="block text-[10px] text-slate-400">GitHub Pages · sem o domínio pages.dev</span>
+                </button>
+              </div>
             )}
-          </button>
+          </div>
         </div>
 
         {/* Linked Spreadsheet */}
@@ -153,7 +185,7 @@ export const LinkCard: React.FC<LinkCardProps> = ({ link, onToggleStatus, onDele
         {/* Performance Statistics */}
         <div className="grid grid-cols-4 gap-2 mt-4 pt-3 border-t border-slate-800/80 text-center">
           <div className="bg-slate-950/40 p-2 rounded-lg">
-            <span className="text-[10px] text-slate-400 block">Cliques Reais</span>
+            <span title="Estimativa: cliques não marcados como bot pelos sinais disponíveis." className="text-[10px] text-slate-400 block">Humanos est.</span>
             <span className="text-sm font-bold text-emerald-400">{metricsReady ? link.realClicksCount || 0 : '—'}</span>
           </div>
           <div className="bg-slate-950/40 p-2 rounded-lg">
@@ -161,11 +193,11 @@ export const LinkCard: React.FC<LinkCardProps> = ({ link, onToggleStatus, onDele
             <span className="text-sm font-bold text-slate-200">{metricsReady ? link.totalClicksCount || 0 : '—'}</span>
           </div>
           <div className="bg-slate-950/40 p-2 rounded-lg">
-            <span className="text-[10px] text-slate-400 block">Únicos</span>
+            <span title="Navegadores identificados por cookie; não identifica pessoas." className="text-[10px] text-slate-400 block">Navegadores</span>
             <span className="text-sm font-bold text-cyan-400">{metricsReady ? link.uniqueVisitorsCount || 0 : '—'}</span>
           </div>
           <div className="bg-slate-950/40 p-2 rounded-lg">
-            <span className="text-[10px] text-slate-400 block">Bots</span>
+            <span className="text-[10px] text-slate-400 block">Bots suspeitos</span>
             <span className="text-sm font-bold text-amber-400">{metricsReady ? link.suspectBotsCount || 0 : '—'}</span>
           </div>
         </div>

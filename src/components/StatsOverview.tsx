@@ -38,15 +38,15 @@ export const StatsOverview: React.FC<StatsOverviewProps> = ({
         </div>
       </div>
 
-      {/* Cliques Reais */}
+      {/* Cliques humanos estimados */}
       <div className="bg-slate-900 border border-emerald-500/30 bg-emerald-950/10 rounded-xl p-4 flex flex-col justify-between">
         <div className="flex items-center justify-between text-emerald-400 mb-2">
-          <span className="text-xs font-semibold">Cliques Reais</span>
+          <span title="Estimativa baseada nos sinais disponíveis; não é confirmação de pessoa." className="text-xs font-semibold">Humanos (est.)</span>
           <CheckCircle className="w-4 h-4" />
         </div>
         <div>
           <span data-metric-number="real" className="text-2xl font-bold text-emerald-400">{metricsReady ? realClicks : '—'}</span>
-          <p className="text-[11px] text-emerald-400/70 mt-0.5">exclui bots e robôs</p>
+          <p className="text-[11px] text-emerald-400/70 mt-0.5">sem bots detectados</p>
         </div>
       </div>
 
@@ -62,15 +62,15 @@ export const StatsOverview: React.FC<StatsOverviewProps> = ({
         </div>
       </div>
 
-      {/* Navegadores Únicos */}
+      {/* Navegadores identificados por link */}
       <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 flex flex-col justify-between">
         <div className="flex items-center justify-between text-slate-400 mb-2">
-          <span className="text-xs font-medium">Navegadores Únicos</span>
+          <span title="Soma de navegadores identificados em cada link, por cookie; não são pessoas únicas." className="text-xs font-medium">Navegadores por link</span>
           <Users className="w-4 h-4 text-cyan-400" />
         </div>
         <div>
           <span data-metric-number="unique" className="text-2xl font-bold text-slate-100">{metricsReady ? uniqueVisitors : '—'}</span>
-          <p className="text-[11px] text-slate-400 mt-0.5">visitantes únicos est.</p>
+          <p className="text-[11px] text-slate-400 mt-0.5">IDs por cookie; não pessoas</p>
         </div>
       </div>
 

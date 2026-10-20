@@ -81,29 +81,23 @@ async function logClick(scriptUrl, request, linkId, visitorId, clickId) {
   }
 }
 
-async function stableVisitorId(request) {
+function existingVisitorId(request) {
   const saved = cookieValue(request, "hub_link_visitor_id");
-  if (saved) return saved;
+  if (!/^[A-Za-z0-9_-]{8,120}$/.test(saved)) return "";
+  // Discard IDs from the former IP+user-agent hash. They can represent several
+  // devices behind one router and must not be reused as browser identities.
+  if (/^edge_[a-f0-9]{64}$/i.test(saved)) return "";
+  return saved;
+}
 
-  // Use a short-lived browser cookie as the primary identifier. If cookies are
-  // blocked, derive a pseudonymous estimate from Cloudflare's client IP and UA;
-  // the raw IP is never sent to Apps Script or stored in Sheets.
-  const ip = request.headers.get("cf-connecting-ip");
-  if (!ip) return crypto.randomUUID();
-  const material = [
-    ip,
-    request.headers.get("user-agent") || "",
-    request.headers.get("accept-language") || "",
-    new URL(request.url).hostname
-  ].join("\n");
-  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(material));
-  const hex = Array.from(new Uint8Array(digest)).map(byte => byte.toString(16).padStart(2, "0")).join("");
-  return "edge_" + hex;
+function visitorIdForRequest(request) {
+  // A random first-party browser ID keeps devices on shared Wi-Fi separate.
+  return existingVisitorId(request) || crypto.randomUUID();
 }
 
 async function fallbackRedirect(scriptUrl, request, linkId) {
-  const previousVisitorId = cookieValue(request, "hub_link_visitor_id");
-  const visitorId = await stableVisitorId(request);
+  const previousVisitorId = existingVisitorId(request);
+  const visitorId = visitorIdForRequest(request);
   const clickId = crypto.randomUUID();
   try {
     const response = await fetch(buildTrackingUrl(scriptUrl, request, linkId, visitorId, clickId), {
@@ -184,7 +178,7 @@ export async function onRequest(context) {
     });
   }
 
-  const visitorId = await stableVisitorId(request);
+  const visitorId = visitorIdForRequest(request);
   const clickId = crypto.randomUUID();
   context.waitUntil(
     logClick(scriptUrl.toString(), request, id, visitorId, clickId)
@@ -197,7 +191,7 @@ export async function onRequest(context) {
     "location": destination.toString(),
     "cache-control": "no-store"
   });
-  if (!cookieValue(request, "hub_link_visitor_id")) {
+  if (!existingVisitorId(request)) {
     headers.append(
       "set-cookie",
       "hub_link_visitor_id=" + encodeURIComponent(visitorId) + "; Path=/; Max-Age=31536000; Secure; SameSite=Lax"

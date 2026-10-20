@@ -366,7 +366,11 @@ function getClickStats_(links) {
         if (bot) result[id].bots++;
         if (!bot && visitorColumn !== undefined) {
           const visitor = String(row[visitorColumn] || "").trim();
-          if (visitor) result[id].visitors[visitor] = true;
+          // Legacy edge_ IDs were derived from shared IP + browser signatures,
+          // so they cannot be treated as a distinct browser per visitor.
+          if (visitor && !/^edge_[a-f0-9]{64}$/i.test(visitor)) {
+            result[id].visitors[visitor] = true;
+          }
         }
       }
     } catch (ignored) {}
