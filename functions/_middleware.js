@@ -81,6 +81,36 @@ async function logClick(scriptUrl, request, linkId, visitorId, clickId) {
   }
 }
 
+async function logTenantClick(db, request, linkId, tenantId, visitorId, clickId) {
+  const url = new URL(request.url);
+  const botHint = classifyBotRequest(request);
+  await db.prepare(
+    `INSERT OR IGNORE INTO clicks (
+      click_id, tenant_id, link_id, occurred_at, visitor_id, is_suspected_bot,
+      origin, utm_source, utm_medium, utm_campaign, utm_content, utm_term,
+      referrer, user_agent, language, timezone
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  ).bind(
+    clickId, tenantId, linkId, new Date().toISOString(), visitorId, botHint ? 1 : 0,
+    url.searchParams.get("origem") || url.searchParams.get("utm_source") || "",
+    url.searchParams.get("utm_source") || "", url.searchParams.get("utm_medium") || "",
+    url.searchParams.get("utm_campaign") || "", url.searchParams.get("utm_content") || "",
+    url.searchParams.get("utm_term") || "", (request.headers.get("referer") || url.searchParams.get("ref") || "").slice(0, 500),
+    (request.headers.get("user-agent") || url.searchParams.get("ua") || "").slice(0, 400),
+    (request.headers.get("accept-language") || url.searchParams.get("lang") || "").slice(0, 80),
+    String((request.cf && request.cf.timezone) || url.searchParams.get("tz") || "").slice(0, 80)
+  ).run();
+}
+
+async function findTenantLink(db, linkId) {
+  if (!db) return null;
+  return db.prepare(
+    `SELECT l.id, l.tenant_id AS tenantId, l.destination_url AS destinationUrl, l.active
+       FROM links l JOIN tenants t ON t.id = l.tenant_id
+      WHERE l.id = ? AND t.status = 'active'`
+  ).bind(linkId).first();
+}
+
 function existingVisitorId(request) {
   const saved = cookieValue(request, "hub_link_visitor_id");
   if (!/^[A-Za-z0-9_-]{8,120}$/.test(saved)) return "";
@@ -135,30 +165,40 @@ export async function onRequest(context) {
     return context.next();
   }
 
-  if (!context.env.LINKS || !context.env.APPS_SCRIPT_URL) {
-    return context.next();
-  }
-  let scriptUrl;
+  let scriptUrl = null;
   try {
-    scriptUrl = new URL(String(context.env.APPS_SCRIPT_URL));
-    if (scriptUrl.protocol !== "https:") return context.next();
-  } catch (_) {
-    return context.next();
+    if (context.env.APPS_SCRIPT_URL) {
+      scriptUrl = new URL(String(context.env.APPS_SCRIPT_URL));
+      if (scriptUrl.protocol !== "https:") scriptUrl = null;
+    }
+  } catch (_) { scriptUrl = null; }
+
+  if (!context.env.LINKS && !context.env.DB) {
+    return scriptUrl ? fallbackRedirect(scriptUrl.toString(), request, id) : context.next();
   }
 
   let link;
-  try {
-    link = await context.env.LINKS.get("link:" + id, "json");
-  } catch (error) {
-    console.error("Cloudflare KV lookup failed:", error && error.message || error);
-    return fallbackRedirect(scriptUrl.toString(), request, id);
+  if (context.env.LINKS) {
+    try {
+      link = await context.env.LINKS.get("link:" + id, "json");
+    } catch (error) {
+      console.error("Cloudflare KV lookup failed:", error && error.message || error);
+    }
   }
 
-  // KV is eventually consistent. A cold/missing key resolves through Apps Script,
-  // which returns the destination and records the click in the same request.
-  if (!link) return fallbackRedirect(scriptUrl.toString(), request, id);
+  // D1 is the source of truth for newly provisioned tenant links. It is also the
+  // fallback when their KV entry is cold or temporarily unavailable.
+  if (!link) {
+    const tenantLink = await findTenantLink(context.env.DB, id).catch((error) => {
+      console.error("Tenant link fallback lookup failed:", error && error.message || error);
+      return null;
+    });
+    if (tenantLink) link = tenantLink;
+  }
+  // Legacy links still resolve and record through the existing Apps Script.
+  if (!link) return scriptUrl ? fallbackRedirect(scriptUrl.toString(), request, id) : context.next();
 
-  if (link.active === false) {
+  if (link.active === false || link.active === 0) {
     return new Response("Este link está inativo.", {
       status: 410,
       headers: { "content-type": "text/plain; charset=utf-8", "cache-control": "no-store" }
@@ -180,8 +220,11 @@ export async function onRequest(context) {
 
   const visitorId = visitorIdForRequest(request);
   const clickId = crypto.randomUUID();
+  const tracking = link.tenantId
+    ? logTenantClick(context.env.DB, request, id, link.tenantId, visitorId, clickId)
+    : (scriptUrl ? logClick(scriptUrl.toString(), request, id, visitorId, clickId) : Promise.resolve());
   context.waitUntil(
-    logClick(scriptUrl.toString(), request, id, visitorId, clickId)
+    tracking
       .catch(function (error) {
         console.error("Background click logging failed:", error && error.message || error);
       })
