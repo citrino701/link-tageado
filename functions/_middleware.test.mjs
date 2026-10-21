@@ -115,6 +115,78 @@ test('normal Instagram in-app browser navigation is not automatically treated as
   }), null);
 });
 
+test('a customer link redirects immediately and writes its click only to that tenant database', async () => {
+  const writes = [];
+  const waits = [];
+  const db = {
+    prepare(sql) {
+      return {
+        bind(...values) {
+          return {
+            async run() { writes.push({ sql, values }); }
+          };
+        }
+      };
+    }
+  };
+  const request = new Request('https://linkshorter.pages.dev/?id=tenant-link-1&utm_source=feira', {
+    headers: {
+      'user-agent': 'Mozilla/5.0 Chrome/130.0 Mobile Safari/537.36',
+      'accept-language': 'pt-BR',
+      'sec-fetch-mode': 'navigate',
+      'sec-fetch-dest': 'document'
+    }
+  });
+  const response = await onRequest({
+    request,
+    env: {
+      LINKS: { get: async () => ({ destinationUrl: 'https://cliente.example/', active: true, tenantId: 'tenant-1' }) },
+      DB: db
+    },
+    waitUntil: promise => waits.push(promise),
+    next: () => new Response('next')
+  });
+  assert.equal(response.status, 302);
+  assert.equal(response.headers.get('location'), 'https://cliente.example/');
+  await Promise.all(waits);
+  assert.equal(writes.length, 1);
+  assert.match(writes[0].sql, /INSERT OR IGNORE INTO clicks/);
+  assert.equal(writes[0].values[1], 'tenant-1');
+  assert.equal(writes[0].values[6], 'feira');
+  assert.equal(writes[0].values[5], 0);
+});
+
+test('a missing customer KV entry can resolve from D1 without falling through to Apps Script', async () => {
+  const waits = [];
+  const writes = [];
+  const db = {
+    prepare(sql) {
+      return {
+        bind(...values) {
+          return {
+            async first() {
+              assert.match(sql, /FROM links l JOIN tenants/);
+              return { id: 'tenant-link-2', tenantId: 'tenant-2', destinationUrl: 'https://client.example/', active: 1 };
+            },
+            async run() { writes.push(values); }
+          };
+        }
+      };
+    }
+  };
+  const response = await onRequest({
+    request: new Request('https://linkshorter.pages.dev/?id=tenant-link-2'),
+    env: { LINKS: { get: async () => null }, DB: db },
+    waitUntil: promise => waits.push(promise),
+    next: () => new Response('next')
+  });
+  assert.equal(response.status, 302);
+  assert.equal(response.headers.get('location'), 'https://client.example/');
+  await Promise.all(waits);
+  assert.equal(writes.length, 1);
+  assert.equal(writes[0][1], 'tenant-2');
+});
+
 
 test('legacy IP-derived cookie is replaced instead of grouping shared-network devices', async () => {
   const legacyId = 'edge_' + 'a'.repeat(64);
