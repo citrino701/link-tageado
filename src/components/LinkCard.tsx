@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { LinkRecord } from '../services/store.ts';
 import { buildPublicLink, displayPublicLink } from '../utils/public-link.ts';
+import { RecentClicks } from './RecentClicks.tsx';
 
 interface LinkCardProps {
   metricsReady?: boolean;
@@ -24,9 +25,10 @@ interface LinkCardProps {
   onToggleStatus: (id: string, newStatus: 'active' | 'inactive') => void;
   onDelete: (id: string) => void;
   onEdit: (link: LinkRecord) => void;
+  onViewHistory: (link: LinkRecord) => void;
 }
 
-export const LinkCard: React.FC<LinkCardProps> = ({ link, onToggleStatus, onDelete, onEdit, metricsReady = true }) => {
+export const LinkCard: React.FC<LinkCardProps> = ({ link, onToggleStatus, onDelete, onEdit, onViewHistory, metricsReady = true }) => {
   const [copied, setCopied] = useState(false);
   const [showLinkFormatMenu, setShowLinkFormatMenu] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -202,6 +204,8 @@ export const LinkCard: React.FC<LinkCardProps> = ({ link, onToggleStatus, onDele
           </div>
         </div>
       </div>
+
+      <RecentClicks clicks={link.recentClicks} ready={metricsReady} linkName={link.name} onViewHistory={() => onViewHistory(link)} />
 
       {/* Action Buttons Row */}
       <div className="mt-5 pt-3 border-t border-slate-800 flex items-center justify-between gap-2">

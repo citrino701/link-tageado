@@ -325,6 +325,7 @@ function getAllLinks_(includeStats) {
     link.realClicksCount = Math.max(0, (item.total || 0) - (item.bots || 0));
     link.uniqueVisitorsCount = item.unique || 0;
     link.suspectBotsCount = item.bots || 0;
+    if (includeStats !== false) link.recentClicks = item.recentClicks === null ? null : (item.recentClicks || []);
   });
 
   return links.sort(function (a, b) {
@@ -345,11 +346,12 @@ function getClickStats_(links) {
     const group = grouped[key];
     try {
       const sheet = SpreadsheetApp.openById(group.spreadsheetId).getSheetByName(group.tab);
-      if (!sheet || sheet.getLastRow() < 2) return;
+      if (!sheet) throw new Error("Aba de cliques não encontrada.");
+      if (sheet.getLastRow() < 2) return;
       const values = sheet.getDataRange().getValues();
       const headers = headerMap_(values[0]);
       const idColumn = headers.link_id;
-      if (idColumn === undefined) return;
+      if (idColumn === undefined) throw new Error("Coluna link_id não encontrada.");
       const visitorColumn = headers.visitor_id;
       const botColumn = headers.suspeito_bot;
 
@@ -357,12 +359,23 @@ function getClickStats_(links) {
         const row = values[i];
         const id = String(row[idColumn] || "").trim();
         if (!group.ids[id]) continue;
-        if (!result[id]) result[id] = { total: 0, bots: 0, visitors: {} };
+        if (!result[id]) result[id] = { total: 0, bots: 0, visitors: {}, recentClicks: [] };
         result[id].total++;
         const userAgentColumn = headers.navegador;
         const browser = userAgentColumn === undefined ? "" : String(row[userAgentColumn] || "");
         const markedBot = botColumn !== undefined && isActive_(row[botColumn]);
         const bot = isBotRecord_(browser, markedBot);
+        if (headers.data_hora === undefined) {
+          result[id].recentClicks = null;
+        } else if (result[id].recentClicks !== null) {
+          const rawDate = row[headers.data_hora];
+          const timestampMs = rawDate ? new Date(rawDate).getTime() : NaN;
+          if (Number.isFinite(timestampMs)) {
+            result[id].recentClicks.unshift({ timestampMs: timestampMs, isBot: bot });
+            result[id].recentClicks.sort(function (a, b) { return b.timestampMs - a.timestampMs; });
+            result[id].recentClicks = result[id].recentClicks.slice(0, 3);
+          }
+        }
         if (bot) result[id].bots++;
         if (!bot && visitorColumn !== undefined) {
           const visitor = String(row[visitorColumn] || "").trim();
@@ -373,12 +386,23 @@ function getClickStats_(links) {
           }
         }
       }
-    } catch (ignored) {}
+    } catch (ignored) {
+      Object.keys(group.ids).forEach(function (id) {
+        if (!result[id]) result[id] = { total: 0, bots: 0, visitors: {} };
+        result[id].recentClicks = null;
+      });
+    }
   });
 
   Object.keys(result).forEach(function (id) {
     result[id].unique = Object.keys(result[id].visitors).length;
     delete result[id].visitors;
+    if (result[id].recentClicks) {
+      const timezone = Session.getScriptTimeZone() || "America/Sao_Paulo";
+      result[id].recentClicks.forEach(function (click) {
+        click.timestamp = Utilities.formatDate(new Date(click.timestampMs), timezone, "dd/MM/yyyy HH:mm:ss");
+      });
+    }
   });
   return result;
 }

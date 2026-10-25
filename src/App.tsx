@@ -64,6 +64,13 @@ export default function App() {
   const [isTestsModalOpen, setIsTestsModalOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<'links' | 'analytics' | 'settings'>('links');
 
+  const [historyLink, setHistoryLink] = useState<LinkRecord | null>(null);
+
+  const handleViewHistory = (link: LinkRecord) => {
+    setHistoryLink(link);
+    setActiveTab('analytics');
+  };
+
   // Toast
   const [toast, setToast] = useState<{
     message: string;
@@ -112,6 +119,7 @@ export default function App() {
               realClicksCount: metric.realClicksCount,
               uniqueVisitorsCount: metric.uniqueVisitorsCount,
               suspectBotsCount: metric.suspectBotsCount,
+              recentClicks: metric.recentClicks,
             } : link;
           }));
           setMetricsReady(true);
@@ -193,6 +201,7 @@ export default function App() {
         String(b.createdAt || '').localeCompare(String(a.createdAt || ''))
       ));
       showToast('Link restaurado na planilha e sincronizado com o Cloudflare.');
+      void loadData();
     } catch (error: any) {
       showToast(error.message || 'Não foi possível desfazer a exclusão.', 'error');
     }
@@ -315,7 +324,7 @@ export default function App() {
               <button type="button" role="tab" aria-selected={activeTab === 'links'} onClick={() => setActiveTab('links')} className={'flex items-center gap-2 rounded-xl px-3 py-3 text-left text-sm font-semibold transition ' + (activeTab === 'links' ? 'bg-emerald-500/15 text-emerald-300 ring-1 ring-emerald-400/25' : 'text-slate-400 hover:bg-slate-800/70 hover:text-slate-100')}>
                 <span className="nav-icon-glass flex h-8 w-8 shrink-0 items-center justify-center rounded-lg"><Link2 className="h-4 w-4" /></span> <span>Links</span>
               </button>
-              <button type="button" role="tab" aria-selected={activeTab === 'analytics'} onClick={() => setActiveTab('analytics')} className={'flex items-center gap-2 rounded-xl px-3 py-3 text-left text-sm font-semibold transition ' + (activeTab === 'analytics' ? 'bg-emerald-500/15 text-emerald-300 ring-1 ring-emerald-400/25' : 'text-slate-400 hover:bg-slate-800/70 hover:text-slate-100')}>
+              <button type="button" role="tab" aria-selected={activeTab === 'analytics'} onClick={() => { setHistoryLink(null); setActiveTab('analytics'); }} className={'flex items-center gap-2 rounded-xl px-3 py-3 text-left text-sm font-semibold transition ' + (activeTab === 'analytics' ? 'bg-emerald-500/15 text-emerald-300 ring-1 ring-emerald-400/25' : 'text-slate-400 hover:bg-slate-800/70 hover:text-slate-100')}>
                 <span className="nav-icon-glass flex h-8 w-8 shrink-0 items-center justify-center rounded-lg"><BarChart3 className="h-4 w-4" /></span> <span>Métricas</span>
               </button>
               <button type="button" role="tab" aria-selected={activeTab === 'settings'} onClick={() => setActiveTab('settings')} className={'flex items-center gap-2 rounded-xl px-3 py-3 text-left text-sm font-semibold transition ' + (activeTab === 'settings' ? 'bg-emerald-500/15 text-emerald-300 ring-1 ring-emerald-400/25' : 'text-slate-400 hover:bg-slate-800/70 hover:text-slate-100')}>
@@ -326,7 +335,7 @@ export default function App() {
         </aside>
 
         <main className="min-w-0 flex-1 space-y-8">
-        {activeTab === 'analytics' ? <AnalyticsPanel links={links} campaigns={availableCampaigns} /> : activeTab === 'settings' ? (
+        {activeTab === 'analytics' ? <AnalyticsPanel key={historyLink?.id || 'campaign-metrics'} links={links} campaigns={availableCampaigns} initialLink={historyLink} onClicksDeleted={() => void loadData()} /> : activeTab === 'settings' ? (
           <SettingsPanel
             adminEmail={adminEmail}
             theme={theme}
@@ -594,6 +603,7 @@ export default function App() {
                           onToggleStatus={handleToggleStatus}
                           onDelete={handleDeleteLink}
                           onEdit={setEditingLink}
+                          onViewHistory={handleViewHistory}
                         />
                       ))}
                     </div>
@@ -612,6 +622,7 @@ export default function App() {
                   onToggleStatus={handleToggleStatus}
                   onDelete={handleDeleteLink}
                   onEdit={setEditingLink}
+                  onViewHistory={handleViewHistory}
                 />
               ))}
             </div>
@@ -624,6 +635,7 @@ export default function App() {
               onToggleStatus={handleToggleStatus}
               onDelete={handleDeleteLink}
               onEdit={setEditingLink}
+              onViewHistory={handleViewHistory}
             />
           )}
         </section>
@@ -639,7 +651,7 @@ export default function App() {
         isOpen={isCreateModalOpen}
         onClose={() => setIsCreateModalOpen(false)}
         onLinkCreated={(newLink) => {
-          setLinks((prev) => [newLink, ...prev]);
+          setLinks((prev) => [{ ...newLink, recentClicks: [] }, ...prev]);
           showToast(`Link "${newLink.name}" criado com sucesso!`);
         }}
         adminEmail={adminEmail}
@@ -649,7 +661,14 @@ export default function App() {
         link={editingLink}
         onClose={() => setEditingLink(null)}
         onSaved={(updated) => {
-          setLinks(current => current.map(link => link.id === updated.id ? updated : link));
+          setLinks(current => current.map(link => link.id === updated.id ? {
+            ...updated,
+            totalClicksCount: link.totalClicksCount,
+            realClicksCount: link.realClicksCount,
+            uniqueVisitorsCount: link.uniqueVisitorsCount,
+            suspectBotsCount: link.suspectBotsCount,
+            recentClicks: link.recentClicks,
+          } : link));
           setEditingLink(null);
           showToast(`Link \"${updated.name}\" atualizado.`);
         }}
