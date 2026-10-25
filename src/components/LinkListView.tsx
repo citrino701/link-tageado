@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { LinkRecord } from '../services/store.ts';
 import { LinkCard } from './LinkCard.tsx';
+import { RecentClicks } from './RecentClicks.tsx';
 
 interface LinkListViewProps {
   links: LinkRecord[];
@@ -20,6 +21,7 @@ interface LinkListViewProps {
   onToggleStatus: (id: string, newStatus: 'active' | 'inactive') => void;
   onDelete: (id: string) => void;
   onEdit: (link: LinkRecord) => void;
+  onViewHistory: (link: LinkRecord) => void;
 }
 
 type DestinationIconKind = 'whatsapp' | 'website' | 'link';
@@ -67,6 +69,7 @@ export function LinkListView({
   onToggleStatus,
   onDelete,
   onEdit,
+  onViewHistory,
 }: LinkListViewProps) {
   const [campaignSelection, setCampaignSelection] = useState('');
   const [selectedLinkId, setSelectedLinkId] = useState('');
@@ -207,36 +210,38 @@ export function LinkListView({
                 : 'text-slate-100';
 
             return (
-              <button
-                key={link.id}
-                type="button"
-                aria-pressed={selectedLinkId === link.id}
-                onClick={() => setSelectedLinkId(link.id)}
-                className={'flex w-full items-center gap-3 rounded-2xl border px-3.5 py-3 text-left transition sm:px-4 ' +
-                  (selectedLinkId === link.id
-                    ? 'border-amber-400/50 bg-amber-400/10 shadow-lg shadow-black/20'
-                    : 'border-slate-800 bg-slate-900/60 hover:border-slate-700 hover:bg-slate-900/85')}
-              >
-                <span className={'link-list-icon-glass flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border ' + iconColor}>
-                  <DestinationIcon kind={kind} />
-                </span>
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-sm font-semibold text-slate-100">{link.name}</span>
-                  <span className="mt-1 flex flex-wrap items-center gap-x-2 text-[11px] text-slate-400">
-                    <span className="truncate">{link.source || 'Direto'}</span>
-                    <span aria-hidden="true">·</span>
-                    <span className="truncate">{link.campaign || 'Sem Campanha'}</span>
-                  </span>
-                </span>
-                <span className={'hidden shrink-0 rounded-full border px-2 py-1 text-[10px] font-bold uppercase tracking-wide sm:inline-flex ' +
-                  (link.status === 'active'
-                    ? 'border-amber-400/25 bg-amber-400/10 text-amber-200'
-                    : 'border-slate-700 bg-slate-800/70 text-slate-400')}
+              <div key={link.id} className="rounded-2xl border border-slate-800 bg-slate-900/60 p-3">
+                <button
+                  type="button"
+                  aria-pressed={selectedLinkId === link.id}
+                  onClick={() => setSelectedLinkId(link.id)}
+                  className={'flex w-full items-center gap-3 rounded-2xl border px-3.5 py-3 text-left transition sm:px-4 ' +
+                    (selectedLinkId === link.id
+                      ? 'border-amber-400/50 bg-amber-400/10 shadow-lg shadow-black/20'
+                      : 'border-slate-800 bg-slate-900/60 hover:border-slate-700 hover:bg-slate-900/85')}
                 >
-                  {link.status === 'active' ? 'Ativo' : 'Pausado'}
-                </span>
-                <ChevronRight className="h-4 w-4 shrink-0 text-slate-500" />
-              </button>
+                  <span className={'link-list-icon-glass flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border ' + iconColor}>
+                    <DestinationIcon kind={kind} />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-sm font-semibold text-slate-100">{link.name}</span>
+                    <span className="mt-1 flex flex-wrap items-center gap-x-2 text-[11px] text-slate-400">
+                      <span className="truncate">{link.source || 'Direto'}</span>
+                      <span aria-hidden="true">·</span>
+                      <span className="truncate">{link.campaign || 'Sem Campanha'}</span>
+                    </span>
+                  </span>
+                  <span className={'hidden shrink-0 rounded-full border px-2 py-1 text-[10px] font-bold uppercase tracking-wide sm:inline-flex ' +
+                    (link.status === 'active'
+                      ? 'border-amber-400/25 bg-amber-400/10 text-amber-200'
+                      : 'border-slate-700 bg-slate-800/70 text-slate-400')}
+                  >
+                    {link.status === 'active' ? 'Ativo' : 'Pausado'}
+                  </span>
+                  <ChevronRight className="h-4 w-4 shrink-0 text-slate-500" />
+                </button>
+                <RecentClicks clicks={link.recentClicks} ready={metricsReady} linkName={link.name} onViewHistory={() => onViewHistory(link)} />
+              </div>
             );
           }) : (
             <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-8 text-center text-sm text-slate-400">
@@ -258,6 +263,7 @@ export function LinkListView({
                 onToggleStatus={onToggleStatus}
                 onDelete={onDelete}
                 onEdit={onEdit}
+                onViewHistory={onViewHistory}
               />
             </div>
           ) : (

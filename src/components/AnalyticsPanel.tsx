@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { BarChart3, Clock3, MousePointerClick, RefreshCw, TrendingUp, Trash2 } from 'lucide-react';
 import { LinkRecord } from '../services/store.ts';
 
@@ -13,13 +13,18 @@ type AnalyticsData = {
   clickRecords: Array<{ rowNumber: number; linkId: string; linkName: string; campaign: string; source: string; clickId: string; timestampMs: number; timestamp: string; isBot: boolean }>;
 };
 
-type Props = { links: LinkRecord[]; campaigns: string[] };
+type Props = {
+  links: LinkRecord[];
+  campaigns: string[];
+  initialLink?: LinkRecord | null;
+  onClicksDeleted?: () => void;
+};
 
 const cardClass = 'rounded-2xl border border-slate-800 bg-slate-900/80 p-5';
 
-export function AnalyticsPanel({ links, campaigns }: Props) {
-  const [campaign, setCampaign] = useState(campaigns[0] || 'all');
-  const [linkId, setLinkId] = useState('all');
+export function AnalyticsPanel({ links, campaigns, initialLink, onClicksDeleted }: Props) {
+  const [campaign, setCampaign] = useState(initialLink ? initialLink.campaign || 'all' : campaigns[0] || 'all');
+  const [linkId, setLinkId] = useState(initialLink?.id || 'all');
   const [days, setDays] = useState(30);
   const [data, setData] = useState<AnalyticsData | null>(null);
   const [loading, setLoading] = useState(false);
@@ -27,6 +32,9 @@ export function AnalyticsPanel({ links, campaigns }: Props) {
   const [selectedClicks, setSelectedClicks] = useState<string[]>([]);
   const [deleting, setDeleting] = useState(false);
   const [deleteMessage, setDeleteMessage] = useState('');
+  const loadVersion = useRef(0);
+  const historyRef = useRef<HTMLDivElement>(null);
+  const shouldFocusHistory = useRef(Boolean(initialLink));
 
   const campaignLinks = useMemo(
     () => links.filter(link => campaign === 'all' || link.campaign === campaign),
@@ -37,9 +45,12 @@ export function AnalyticsPanel({ links, campaigns }: Props) {
     if (linkId !== 'all' && !campaignLinks.some(link => link.id === linkId)) setLinkId('all');
   }, [campaignLinks, linkId]);
 
-  const loadAnalytics = async () => {
+  const loadAnalytics = useCallback(async () => {
+    const version = ++loadVersion.current;
     setLoading(true);
     setError('');
+    setData(null);
+    setSelectedClicks([]);
     try {
       const response = await fetch('/api/admin/analytics', {
         method: 'POST',
@@ -47,16 +58,29 @@ export function AnalyticsPanel({ links, campaigns }: Props) {
         body: JSON.stringify({ campaign, linkId, days }),
       });
       const result = await response.json();
+      if (version !== loadVersion.current) return;
       if (!response.ok) throw new Error(result?.error || 'Não foi possível montar os gráficos.');
       setData(result as AnalyticsData);
     } catch (err: any) {
-      setError(err?.message || 'Não foi possível carregar os dados.');
+      if (version === loadVersion.current) setError(err?.message || 'Não foi possível carregar os dados.');
     } finally {
-      setLoading(false);
+      if (version === loadVersion.current) setLoading(false);
     }
-  };
+  }, [campaign, linkId, days]);
 
-  useEffect(() => { void loadAnalytics(); }, [campaign, linkId, days]);
+  useEffect(() => {
+    setDeleteMessage('');
+    void loadAnalytics();
+    return () => { loadVersion.current++; };
+  }, [loadAnalytics]);
+
+  useEffect(() => {
+    if (!loading && data && shouldFocusHistory.current && historyRef.current) {
+      shouldFocusHistory.current = false;
+      historyRef.current.focus({ preventScroll: true });
+      historyRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  }, [loading, data]);
 
   const peakHour = data?.hourly.reduce((best, item) => item.clicks > best.clicks ? item : best, { hour: 0, clicks: 0 });
   const peakDay = data?.daily.reduce((best, item) => item.clicks > best.clicks ? item : best, { date: '', label: '—', clicks: 0 });
@@ -70,10 +94,11 @@ export function AnalyticsPanel({ links, campaigns }: Props) {
     if (!window.confirm(`Apagar ${items.length} registro(s) de clique das planilhas? Essa ação não pode ser desfeita.`)) return;
     setDeleting(true); setDeleteMessage('');
     try {
-      const response = await fetch('/api/admin/clicks/delete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ items: items.map(({ linkId, rowNumber, timestampMs, clickId }) => ({ linkId, rowNumber, timestampMs, clickId })) }) });
+      const response = await fetch('/api/admin/clicks/delete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ filters: { campaign, linkId, days }, items: items.map(({ linkId, rowNumber, timestampMs, clickId }) => ({ linkId, rowNumber, timestampMs, clickId })) }) });
       const result = await response.json();
       if (!response.ok) throw new Error(result?.error || 'Não foi possível apagar os cliques.');
       setSelectedClicks([]); setDeleteMessage(`${result.deletedCount || items.length} clique(s) apagado(s).`);
+      onClicksDeleted?.();
       await loadAnalytics();
     } catch (err: any) { setError(err?.message || 'Erro ao apagar cliques.'); }
     finally { setDeleting(false); }
@@ -88,23 +113,23 @@ export function AnalyticsPanel({ links, campaigns }: Props) {
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <label className="text-xs text-slate-400">Campanha
-            <select value={campaign} onChange={event => setCampaign(event.target.value)} className="ml-2 rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-slate-100">
+            <select value={campaign} disabled={deleting} onChange={event => { setLinkId('all'); setCampaign(event.target.value); }} className="ml-2 rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-slate-100">
               <option value="all">Todas</option>
               {campaigns.map(name => <option key={name} value={name}>{name}</option>)}
             </select>
           </label>
           <label className="text-xs text-slate-400">Link
-            <select value={linkId} onChange={event => setLinkId(event.target.value)} className="ml-2 max-w-48 rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-slate-100">
+            <select value={linkId} disabled={deleting} onChange={event => setLinkId(event.target.value)} className="ml-2 max-w-48 rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-slate-100">
               <option value="all">Todos os links</option>
               {campaignLinks.map(link => <option key={link.id} value={link.id}>{link.name}</option>)}
             </select>
           </label>
           <label className="text-xs text-slate-400">Período
-            <select value={days} onChange={event => setDays(Number(event.target.value))} className="ml-2 rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-slate-100">
+            <select value={days} disabled={deleting} onChange={event => setDays(Number(event.target.value))} className="ml-2 rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-slate-100">
               <option value={7}>7 dias</option><option value={30}>30 dias</option><option value={90}>90 dias</option>
             </select>
           </label>
-          <button type="button" onClick={() => void loadAnalytics()} disabled={loading} className="inline-flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-slate-200 hover:bg-slate-700 disabled:opacity-50">
+          <button type="button" onClick={() => void loadAnalytics()} disabled={loading || deleting} className="inline-flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-slate-200 hover:bg-slate-700 disabled:opacity-50">
             <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} /> Atualizar
           </button>
         </div>
@@ -156,20 +181,20 @@ export function AnalyticsPanel({ links, campaigns }: Props) {
                 <span className="w-12 text-right tabular-nums text-slate-400">{item.clicks}</span>
               </div>) : <p className="text-xs text-slate-500">Sem cliques no período.</p>}
             </div>
-          <div className={cardClass}>
+          </div>
+          <div ref={historyRef} tabIndex={-1} aria-label="Histórico de cliques" className={`${cardClass} scroll-mt-6`}>
             <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-              <div><h2 className="text-sm font-semibold text-slate-100">Registros recentes de clique</h2><p className="mt-1 text-xs text-slate-400">Até 100 registros no período selecionado. A exclusão remove a linha da planilha.</p></div>
+              <div><h2 className="text-sm font-semibold text-slate-100">Histórico de cliques{linkId !== 'all' ? ` · ${links.find(link => link.id === linkId)?.name || linkId}` : ''}</h2><p className="mt-1 text-xs text-slate-400">Até 100 registros nos últimos {days} dias, incluindo bots suspeitos. Altere o período acima para consultar outros intervalos disponíveis. A exclusão remove a linha da planilha.</p></div>
               <button type="button" onClick={() => void deleteSelected()} disabled={!selectedClicks.length || deleting} className="inline-flex items-center gap-2 rounded-lg border border-rose-500/40 bg-rose-950/30 px-3 py-2 text-xs font-semibold text-rose-300 disabled:opacity-40"><Trash2 className="h-4 w-4" />{deleting ? 'Apagando…' : `Apagar selecionados (${selectedClicks.length})`}</button>
             </div>
             {deleteMessage && <p role="status" className="mb-3 text-xs text-emerald-400">{deleteMessage}</p>}
             <div className="max-h-[28rem] overflow-auto rounded-lg border border-slate-800">
               <table className="w-full min-w-[720px] text-left text-xs">
                 <thead className="sticky top-0 bg-slate-800 text-slate-300"><tr><th className="p-2"><input aria-label="Selecionar todos os registros visíveis" type="checkbox" checked={Boolean(data.clickRecords.length) && selectedClicks.length === data.clickRecords.length} onChange={event => setSelectedClicks(event.target.checked ? data.clickRecords.map(clickKey) : [])} /></th><th className="p-2">Data e hora</th><th className="p-2">Campanha / link</th><th className="p-2">Origem</th><th className="p-2">Tipo</th></tr></thead>
-                <tbody>{data.clickRecords.map(item => <tr key={clickKey(item)} className="border-t border-slate-800 text-slate-300"><td className="p-2"><input aria-label={`Selecionar clique de ${item.linkName} em ${item.timestamp}`} type="checkbox" checked={selectedClicks.includes(clickKey(item))} onChange={event => setSelectedClicks(current => event.target.checked ? [...current, clickKey(item)] : current.filter(key => key !== clickKey(item)))} /></td><td className="whitespace-nowrap p-2">{item.timestamp}</td><td className="p-2"><span className="block font-medium text-slate-200">{item.linkName}</span><span className="text-slate-500">{item.campaign}</span></td><td className="p-2">{item.source || 'Direto'}</td><td className="p-2">{item.isBot ? 'Bot / prévia' : 'Pessoa'}</td></tr>)}</tbody>
+                <tbody>{data.clickRecords.map(item => <tr key={clickKey(item)} className="border-t border-slate-800 text-slate-300"><td className="p-2"><input aria-label={`Selecionar clique de ${item.linkName} em ${item.timestamp}`} type="checkbox" checked={selectedClicks.includes(clickKey(item))} onChange={event => setSelectedClicks(current => event.target.checked ? [...current, clickKey(item)] : current.filter(key => key !== clickKey(item)))} /></td><td className="whitespace-nowrap p-2">{item.timestamp}</td><td className="p-2"><span className="block font-medium text-slate-200">{item.linkName}</span><span className="text-slate-500">{item.campaign}</span></td><td className="p-2">{item.source || 'Direto'}</td><td className="p-2">{item.isBot ? 'Bot suspeito' : 'Humano (est.)'}</td></tr>)}</tbody>
               </table>
               {!data.clickRecords.length && <p className="p-5 text-center text-xs text-slate-500">Nenhum registro recente neste período.</p>}
             </div>
-          </div>
           </div>
         </>
       )}

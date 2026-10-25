@@ -177,6 +177,12 @@ async function getDocs(reference: FirestoreCollectionReference) {
   };
 }
 
+export interface RecentClick {
+  timestampMs: number;
+  timestamp: string;
+  isBot: boolean;
+}
+
 export interface LinkRecord {
   aba?: string;
   id: string;
@@ -198,6 +204,7 @@ export interface LinkRecord {
   totalClicksCount: number;
   uniqueVisitorsCount: number;
   suspectBotsCount: number;
+  recentClicks?: RecentClick[] | null;
   createdByEmail: string;
   createdAt: string;
   updatedAt: string;
